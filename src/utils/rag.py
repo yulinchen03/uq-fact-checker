@@ -45,7 +45,7 @@ class RAG:
             raise FileNotFoundError(f"Vector database not found at {self.db_path}. Please run vector_db.py first.")
             
         self.db = Chroma(persist_directory=self.db_path, embedding_function=self.embedding_model)
-        self.retriever = self.db.as_retriever(search_kwargs={"k": 3})
+        self.retriever = self.db.as_retriever(search_kwargs={"k": 5})
 
         # 3. Load LLM
         print("Loading LLM ...")
@@ -90,7 +90,15 @@ class RAG:
         
         # 4. Define Prompt Template (ChatML)
         self.template = """<|im_start|>system
-You are a helpful assistant. Answer the question strictly based on the context provided. If the answer is not in the context, say "I don't know".<|im_end|>
+You are an intelligent research assistant. Your task is to answer the user's question using the provided Context.
+
+Guidelines:
+1. **Analyze the Context**: Look for facts, dates, names, and events that relate to the question.
+2. **Allow Logical Inference**: If the answer is not explicitly stated but can be logically deduced from the context (e.g., if the context says "Kamala Harris was Acting President" and the question is "Has a woman been Acting President?"), you MUST answer "Yes" and explain why.
+3. **Cite Evidence**: Reference specific details from the context to support your answer.
+4. **Uncertainty**: Only say "I don't know" if the context is completely irrelevant or contradicts itself without resolution.
+
+<|im_end|>
 <|im_start|>user
 Context:
 {context}
@@ -98,7 +106,7 @@ Context:
 Question: 
 {question}<|im_end|>
 <|im_start|>assistant
-"""
+Based on the documents provided,"""
 
         self.prompt = ChatPromptTemplate.from_template(self.template)
         print("RAG System Ready.")
@@ -106,45 +114,25 @@ Question:
     def _format_docs(self, docs):
         """Helper to join retrieved documents."""
         return "\n\n".join([doc.page_content for doc in docs])
-
-    def ask(self, query):
-        """
-        Public method to query the RAG system.
-        """
-        print("-" * 80)
-        print(f"Thinking about: '{query}'...")
-        print("-" * 80)
-        
-        rag_chain = (
-            {"context": self.retriever | self._format_docs, "question": RunnablePassthrough()}
-            | self.prompt
-            | self.llm
-            | StrOutputParser()
-        )
-        
-        return rag_chain.invoke(query)
     
-    # def ask(self, query):
-    #     print(f"Thinking about: '{query}'...")
+    def ask(self, query, debug=False):
+        print(f"Thinking about: '{query}'...")
         
-    #     # Step 1: Retrieve
-    #     docs = self.retriever.invoke(query)
-    #     context_text = self._format_docs(docs)
-        
-    #     # DEBUG: Print what the LLM actually sees
-    #     print(f"\n[DEBUG] RETRIEVED CONTEXT:\n{context_text}\n" + "-"*20)
-        
-    #     # Step 2: Generate
-    #     # (Re-create the chain here manually to pass the pre-fetched context)
-    #     response = (
-    #         self.prompt 
-    #         | self.llm 
-    #         | StrOutputParser()
-    #     ).invoke({"context": context_text, "question": query})
-        
-    #     return response
+        docs = self.retriever.invoke(query)
+        context_text = self._format_docs(docs)
 
-    def ask_with_uncertainty(self, query):
+        if debug:
+            print(f"\n[DEBUG] RETRIEVED CONTEXT:\n{context_text}\n" + "-"*20)
+        
+        response = (
+            self.prompt 
+            | self.llm 
+            | StrOutputParser()
+        ).invoke({"context": context_text, "question": query})
+        
+        return response
+
+    def ask_with_uncertainty(self, query, debug=False):
         """
         RAG query with Uncertainty Estimation.
         Uses lm-polygraph to calculate confidence score.
@@ -152,27 +140,27 @@ Question:
         print("-" * 80)
         print(f"Thinking (with uncertainty check) about: '{query}'...")
         
-        # 1. Manually Retrieve Context
         docs = self.retriever.invoke(query)
         context_text = self._format_docs(docs)
+
+        if debug:
+            print(f"\n[DEBUG] RETRIEVED CONTEXT:\n{context_text}\n" + "-"*20)
         
-        # 2. Manually Format Prompt (Polygraph expects a single string)
+        # Manually Format Prompt (Polygraph expects a single string)
         full_input_text = self.template.format(context=context_text, question=query)
 
-        # 3. Estimate Uncertainty
         result = estimate_uncertainty(
             self.whitebox_model, 
             self.estimator, 
             input_text=full_input_text
         )
 
-        # 4. Extract Answer and Score
         answer = result.generation_text
         # Clean up output if needed (sometimes Polygraph returns list of strings)
         if isinstance(answer, list):
             answer = answer[0]
 
-        return answer, result.uncertainty
+        return answer, result.uncertainty, self.estimator.__str__()
 
 if __name__ == "__main__":
     rag = RAG()

@@ -6,7 +6,7 @@ dependencies = [
     "numpy",
     "pandas",
     "matplotlib",
-    "transformers>=4.57.1",
+    "transformers==4.49",
     "scikit-learn",
     "sentence-transformers",
     "langchain>=1.0.5",
