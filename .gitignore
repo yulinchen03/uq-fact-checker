@@ -151,3 +151,5 @@ secrets.json
 chroma_db_semantic
 .claude
 src/ckpts
+
+SeSE/

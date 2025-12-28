@@ -22,6 +22,7 @@ dependencies = [
     "langchain-experimental>=0.4.0",
     "langchain-chroma>=1.0.0",
     "accelerate>=1.12.0",
+    "cdlib>=0.4.0",
 ]
 
 [tool.uv]
