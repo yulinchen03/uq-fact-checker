@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import sys
 import heapq
 import itertools
 import json
@@ -21,14 +21,25 @@ from transformers import (
     AutoTokenizer,
 )
 
+from dotenv import load_dotenv, find_dotenv
+
+load_dotenv(find_dotenv())
+
 # ---------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------
 
+# logging.basicConfig(
+#     level=logging.INFO,
+#     format="%(asctime)s | %(levelname)-8s | %(message)s",
+#     datefmt="%Y-%m-%d %H:%M:%S",
+# )
+
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)-8s | %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
+    level=logging.INFO, 
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)],
+    force=True  # Overrides any other library's logging config
 )
 
 # ---------------------------------------------------------------------
@@ -53,10 +64,7 @@ with tqdm(total=1, desc="Loading sentence-embedding model") as bar:
     bar.update(1)
 
 # ---------------- OpenAI client --------------------------------------
-# client = OpenAI(
-#     base_url=os.getenv("OPENAI_BASE_URL", ""),
-#     api_key=os.getenv("OPENAI_API_KEY", ""),
-# )
+client = OpenAI()
 
 def page_rank(
     adjacency_matrix: np.ndarray,
@@ -263,30 +271,30 @@ def enhancing_answers(responses: List[str], question: str) -> List[str]:
     """
     # --- MODIFICATION START: Passthrough to avoid OpenAI costs ---
     # We return the original responses directly to skip the GPT-4 enhancement step.
-    logging.info("Skipping OpenAI enhancement (Cost-Saving Mode)")
-    return responses
+    # logging.info("Skipping OpenAI enhancement (Cost-Saving Mode)")
+    # return responses
     # --- MODIFICATION END ---
 
     # --- ORIGINAL CODE COMMENTED OUT BELOW ---
-    # logging.info("Enhancing answers …")
-    # max_retries = 3
-    # for attempt in range(1, max_retries + 1):
-    #     try:
-    #         prompt = build_prompt(question, responses)
-    #
-    #         chat_completion = client.chat.completions.create(
-    #             model="gpt-4o",
-    #             temperature=0.1,
-    #             max_tokens=2048,
-    #             messages=[{"role": "user", "content": prompt}],
-    #         )
-    #         enhanced_text = chat_completion.choices[0].message.content
-    #         return parse_enhanced_responses(enhanced_text, len(responses))
-    #     except Exception as exc:
-    #         logging.warning("Enhancing attempt %d/%d failed: %s", attempt, max_retries, exc)
-    #
-    # logging.error("Enhancing failed – falling back to original responses.")
-    # return responses
+    logging.info("Enhancing answers …")
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        try:
+            prompt = build_prompt(question, responses)
+    
+            chat_completion = client.chat.completions.create(
+                model="gpt-5-mini",
+                # temperature=0.1,
+                max_completion_tokens=2048,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            enhanced_text = chat_completion.choices[0].message.content
+            return parse_enhanced_responses(enhanced_text, len(responses))
+        except Exception as exc:
+            logging.warning("Enhancing attempt %d/%d failed: %s", attempt, max_retries, exc)
+    
+    logging.error("Enhancing failed – falling back to original responses.")
+    return responses
 
 
 def compute_sentence_transformer_similirities(
