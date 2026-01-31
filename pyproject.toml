@@ -6,7 +6,6 @@ dependencies = [
     "numpy",
     "pandas",
     "matplotlib",
-    "transformers>=4.53.0",
     "scikit-learn",
     "sentence-transformers",
     "langchain>=1.0.5",
@@ -26,6 +25,8 @@ dependencies = [
     "openai>=2.14.0",
     "vllm>=0.6.0",
     "minicheck[llm]",
+    "ipykernel>=7.1.0",
+    "datasets>=4.4.2",
 ]
 
 [tool.uv]
@@ -37,4 +38,4 @@ minicheck = { git = "https://github.com/Liyan06/MiniCheck.git", rev = "main" }
 
 [[tool.uv.index]]
 name = "pytorch"
-url = "https://download.pytorch.org/whl/cu128"
+url = "https://download.pytorch.org/whl/cu130"
