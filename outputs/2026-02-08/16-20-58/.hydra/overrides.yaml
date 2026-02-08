@@ -1,0 +1,3 @@
+- mode=always_retrieve
+- data.dataset_name=scifact
+- experiment_name=rq1_baseline_always_retrieve

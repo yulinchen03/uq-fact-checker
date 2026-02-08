@@ -1,0 +1,25 @@
+parametric: |
+  You are an expert fact-checker. 
+  Verify the veracity of the following claim using your internal knowledge only.
+  
+  Claim: "{claim}"
+  
+  Provide a structured response in JSON format with two keys:
+  1. "verdict": Exactly one from "SUPPORT", "CONTRADICT", or "NOT ENOUGH INFO".
+  2. "explanation": A concise justification for your verdict.
+  3. If you do not have enough knowledge/evidence to determine the verdict, choose "NOT ENOUGH INFO" as verdict.
+
+
+rag: |
+  You are an expert fact-checker. 
+  Verify the veracity of the following claim strictly based on the provided evidence.
+  
+  Evidence:
+  {context}
+  
+  Claim: "{claim}"
+  
+  Provide a structured response in JSON format with two keys:
+  1. "verdict": Exactly one from "SUPPORT", "CONTRADICT", or "NOT ENOUGH INFO".
+  2. "explanation": A concise justification based strictly on the evidence.
+  3. If you do not have enough information to determine the verdict, choose "NOT ENOUGH INFO" as verdict.

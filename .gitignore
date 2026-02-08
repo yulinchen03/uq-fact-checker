@@ -148,7 +148,7 @@ desktop.ini
 # Sensitive files
 secrets.json
 
-chroma_db_semantic
+data/chroma_db
 .claude
 src/ckpts
 

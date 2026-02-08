@@ -1,0 +1,34 @@
+experiment_name: rq1_baseline_never_retrieve
+mode: never_retrieve
+retriever:
+  type: vector_db
+  db_path: ./data/chroma_db
+  collection_name: scifact_corpus
+  embedding_model: Qwen/Qwen3-Embedding-0.6B
+  top_k: 3
+  debug: false
+llm:
+  provider: local_huggingface
+  model_name: Qwen/Qwen2.5-1.5B-Instruct
+  device: cuda
+  max_new_tokens: 512
+  temperature: 0.1
+  do_sample: false,
+  debug: true
+aggregator:
+  max_context_tokens: 8000
+data:
+  root_path: ./data
+  dataset_name: scifact
+  split: dev
+prompts:
+  rag: "You are an expert fact-checker. \nVerify the veracity of the following claim\
+    \ strictly based on the provided evidence.\n\nEvidence:\n{context}\n\nClaim: \"\
+    {claim}\"\n\nProvide a structured response in JSON format with two keys:\n1. \"\
+    verdict\": One of \"SUPPORT\", \"CONTRADICT\", or \"NOT ENOUGH INFO\".\n2. \"\
+    explanation\": A concise, one-sentence justification based strictly on the evidence.\n"
+  parametric: "You are an expert fact-checker. \nVerify the veracity of the following\
+    \ claim using your internal knowledge only.\n\nClaim: \"{claim}\"\n\nProvide a\
+    \ structured response in JSON format with two keys:\n1. \"verdict\": One of \"\
+    SUPPORT\", \"CONTRADICT\", or \"NOT ENOUGH INFO\".\n2. \"explanation\": A concise,\
+    \ one-sentence justification for your verdict."
