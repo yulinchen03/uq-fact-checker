@@ -1,7 +1,7 @@
 from .base import PipelineComponent
 
 
-class IdentityGenerator(PipelineComponent):
+class QueryGenerator(PipelineComponent):
     def process(self, sample):
         sample.search_queries = [sample.claim]
         return sample

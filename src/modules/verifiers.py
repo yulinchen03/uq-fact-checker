@@ -7,21 +7,19 @@ from src.utils.metrics import MetricsRecorder
 class LLMVerifier(PipelineComponent):
     """Verifies claims using an LLM with RAG or parametric templates."""
 
-    def __init__(self, llm_client, prompt_templates: dict, cfg):
+    def __init__(self, llm_client, cfg):
         self.llm_client = llm_client
-        self.prompt_templates = prompt_templates
         self.cfg = cfg
 
     def process(self, sample):
         # 1. Select Template
         if sample.mode == "always_retrieve":
-            template = self.prompt_templates["rag"]
-            # Ensure context exists to avoid KeyError
+            template = self.cfg.prompts.rag
             context = sample.aggregated_context if sample.aggregated_context else "No relevant evidence found."
             prompt = template.format(claim=sample.claim, context=context)
             
         elif sample.mode == "never_retrieve":
-            template = self.prompt_templates["parametric"]
+            template = self.cfg.prompts.parametric
             prompt = template.format(claim=sample.claim)
 
         elif sample.mode == "UQ-aware":

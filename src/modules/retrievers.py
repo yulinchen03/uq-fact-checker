@@ -16,17 +16,19 @@ class BaseRetriever(PipelineComponent):
 class VectorDBRetriever(BaseRetriever):
     """Retriever using vector databases (ChromaDB)."""
     
-    def __init__(self, db_path: str, embedding_model: str, top_k: int = 3, device: str = "cuda", debug: bool = False):
+    def __init__(self, collection: str, db_path: str, embedding_model: str, top_k: int = 3, device: str = "cuda", debug: bool = False):
         """
         Initialize connection to vector database and load embedding model.
         
         Args:
+            collection: Name of the ChromaDB collection.
             db_path: Path to the vector database.
             embedding_model: Name of the embedding model.
             top_k: Number of documents to retrieve per query.
             device: 'cuda' or 'cpu'.
             debug: Whether to enable debug logging.
         """
+        self.collection_name = collection
         self.top_k = top_k
         self.device = device
         self.debug = debug
@@ -45,9 +47,9 @@ class VectorDBRetriever(BaseRetriever):
         self.client = chromadb.PersistentClient(path=db_path)
         
         try:
-            self.collection = self.client.get_collection("scifact_corpus")
+            self.collection = self.client.get_collection(self.collection_name)
         except Exception as e:
-            print(f"Error loading collection 'scifact_corpus': {e}")
+            print(f"Error loading collection '{self.collection_name}': {e}")
             raise
 
     def _retrieve(self, query: str) -> List[Document]:
@@ -113,8 +115,8 @@ class VectorDBRetriever(BaseRetriever):
         
         sample.retrieved_evidence = unique_results
 
-        # --- DEBUG PRINT ---
-        if self.debug:            
+        # --- DEBUG PRINT (scifact) ---
+        if self.debug and self.collection_name == "scifact_corpus":            
             retrieved_ids = [str(doc.source_id) for doc in unique_results]
             
             # Now we can just use the list directly!

@@ -3,7 +3,7 @@ import hydra
 import json
 import logging
 import time
-from pathlib import Path  # <--- Essential for path handling
+from pathlib import Path
 from omegaconf import DictConfig
 from tqdm import tqdm
 from dotenv import load_dotenv
@@ -44,6 +44,9 @@ def main(cfg: DictConfig):
     
     print(f"Running Experiment: {cfg.experiment_name} | Mode: {cfg.mode} | Data Split: {cfg.data.split}")
     print(f"Saving results to: {output_file}")
+
+    # --- empty the file before starting ---
+    open(output_file, 'w').close()
     
     # 4. Execution Loop
     with open(output_file, 'w') as f_out:

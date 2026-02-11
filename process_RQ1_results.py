@@ -5,12 +5,54 @@ from sklearn.metrics import balanced_accuracy_score, confusion_matrix, classific
 from pathlib import Path
 import hydra
 
+def get_normalization_map(dataset_name):
+    """
+    Returns a dictionary to map varied LLM outputs to a single standard format per dataset.
+    Standardizes everything to UPPERCASE to avoid case-sensitivity bugs.
+    """
+    if dataset_name.lower() == "scifact":
+        return {
+            # Gold Standard
+            "SUPPORT": "SUPPORT",
+            "CONTRADICT": "CONTRADICT",
+            "NOT ENOUGH INFO": "NOT ENOUGH INFO",
+            
+            # Variations / Typos
+            "SUPPORTED": "SUPPORT",
+            "REFUTED": "CONTRADICT",
+            "NEI": "NOT ENOUGH INFO",
+            "NOT": "NOT ENOUGH INFO"
+        }
+    elif dataset_name.lower() == "quantemp":
+        return {
+            # Gold Standard (Upper Case)
+            "TRUE": "TRUE",
+            "FALSE": "FALSE",
+            "CONFLICTING": "CONFLICTING",
+            
+            # Title Case Variations
+            "True": "TRUE",
+            "False": "FALSE",
+            "Conflicting": "CONFLICTING",
+            
+            # SciFact Hallucinations (Map to Quantemp equivalents)
+            "SUPPORT": "TRUE",
+            "SUPPORTED": "TRUE",
+            "CONTRADICT": "FALSE",
+            "REFUTED": "FALSE",
+            "NOT ENOUGH INFO": "CONFLICTING",
+            "NEI": "CONFLICTING"
+        }
+    return {}
+
 @hydra.main(version_base=None, config_path="config", config_name="config")
 def analyze_results(cfg: DictConfig):
     file_path = f"results/RQ1/{cfg.data.dataset_name}/{cfg.mode}/results_{cfg.data.split}.jsonl"
+
     if not Path(file_path).exists():
         print(f"Error: File not found at {file_path}")
         return
+    
     save_path = f"results/RQ1/{cfg.data.dataset_name}/{cfg.mode}/results_{cfg.data.split}_stats.json"
     print(f"Analyzing: {file_path}")
     
@@ -19,7 +61,10 @@ def analyze_results(cfg: DictConfig):
     latencies = []
     total_tokens = []
 
-    # --- READ DATA ---
+    # Get the correct label map for this dataset
+    label_map = get_normalization_map(cfg.data.dataset_name)
+    dataset_type = cfg.data.dataset_name.upper()
+
     with open(file_path, 'r') as f:
         for line in f:
             try:
@@ -30,11 +75,23 @@ def analyze_results(cfg: DictConfig):
                 latencies.append(metrics.get("latency_seconds", 0.0))
                 total_tokens.append(metrics.get("input_tokens", 0) + metrics.get("output_tokens", 0))
                 
-                # Labels
-                gold = data.get("gold_label", "NOT ENOUGH INFO").upper()
-                raw_pred = data.get("predicted_verdict", "NOT ENOUGH INFO")
-                pred = raw_pred.upper().strip() if raw_pred else "NOT ENOUGH INFO"
+                gold_raw = str(data.get("gold_label", "NOT ENOUGH INFO")).upper().strip()
+                pred_raw = str(data.get("predicted_verdict", "NOT ENOUGH INFO")).upper().strip()
                 
+                # 2. Clean Punctuation (e.g., "FALSE." -> "FALSE")
+                pred_raw = pred_raw.replace(".", "")
+
+                # 3. Apply Map
+                # If key not in map, default to the Uppercased Raw value (or specific fallback)
+                gold = label_map.get(gold_raw, gold_raw) 
+                
+                if dataset_type == "QUANTEMP":
+                    # Default Quantemp fallback
+                    pred = label_map.get(pred_raw, "CONFLICTING")
+                else:
+                    # Default SciFact fallback
+                    pred = label_map.get(pred_raw, "NOT ENOUGH INFO")
+
                 y_true.append(gold)
                 y_pred.append(pred)
             except json.JSONDecodeError:

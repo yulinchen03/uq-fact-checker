@@ -62,39 +62,43 @@ class LocalDataLoader:
         print(f"Loaded {len(samples)} samples from {file_path}")
         return samples
 
-    def _load_quantemp(self, split: str) -> List[FactCheckSample]:
-        # Quantemp map: dev -> val
-        # Path: data/Quantemp/data/raw_data/{split}_claims_quantemp.json
-        if split == "dev": 
-            split = "val"
-            
-        file_name = f"{split}_claims_quantemp.json"
-        file_path = self.data_root / "Quantemp" / "data" / "raw_data" / file_name
+    def _load_quantemp(self, split: str) -> List[FactCheckSample]:     
+        # Path: data/quantemp/claims_train.json
+        base_path = self.data_root / "quantemp"
+        file_name = f"claims_{split}.json"
         
+        file_path = base_path / file_name
+
         if not file_path.exists():
-            raise FileNotFoundError(f"Quantemp file not found: {file_path}")
+            raise FileNotFoundError(f"Quantemp file not found at: {file_path}")
+
+        print(f"Loading Quantemp from {file_path}...")
 
         with open(file_path, 'r', encoding='utf-8') as f:
-            data_list = json.load(f) # It is a JSON List
+            data_list = json.load(f)
 
         samples = []
-        # Use enumerate to generate stable IDs since 'id' field is missing
         for idx, data in enumerate(data_list):
-            empty_metrics = FactCheckMetrics(
-                latency_seconds=0.0, input_tokens=0, output_tokens=0
-            )
-
+            
+            # 1. Generate Stable ID (Essential for tracking)
+            # Format: qt_val_0, qt_val_1, etc.
+            sample_id = f"{split}_{idx}"
+            
+            # 2. Raw Label (No Normalization)
+            # We treat the raw label (True/False) as the gold standard
+            raw_label = str(data.get("label", "False"))
+            
             sample = FactCheckSample(
-                id=f"qt_{split}_{idx}",
+                id=sample_id,
                 claim=data.get("claim"),
-                gold_label=str(data.get("label", "NOT ENOUGH INFO")),
-                gold_evidence=data.get("evidence", []), # Pass evidence if available
+                gold_label=raw_label,   # Keeps "True", "False", "Conflicting"
+                gold_evidence=[],       # Empty (Retrieval accuracy ignored)
                 mode="always_retrieve",
-                metrics=empty_metrics
+                metrics=FactCheckMetrics(latency_seconds=0.0, input_tokens=0, output_tokens=0)
             )
             samples.append(sample)
             
-        print(f"Loaded {len(samples)} samples from {file_path}")
+        print(f"Loaded {len(samples)} Quantemp samples.")
         return samples
 
     def _extract_scifact_label(self, data: dict) -> str:

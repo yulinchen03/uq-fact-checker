@@ -153,3 +153,9 @@ data/chroma_db
 src/ckpts
 
 SeSE/
+QuanTemp
+data/vector_db
+outputs
+
+data/quantemp/corpus.json 
+# too large

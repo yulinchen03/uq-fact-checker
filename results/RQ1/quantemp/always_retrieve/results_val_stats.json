@@ -1,0 +1,54 @@
+{
+    "experiment_mode": "always_retrieve",
+    "dataset": "quantemp",
+    "total_claims": 3084,
+    "metrics": {
+        "balanced_accuracy": 0.3466547480922004,
+        "avg_latency_seconds": 1.3955645620279338,
+        "avg_token_overhead": 472.8910505836576
+    },
+    "per_class_metrics": {
+        "CONFLICTING": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1-score": 0.0,
+            "support": 672
+        },
+        "FALSE": {
+            "precision": 0.5853154084798345,
+            "recall": 0.9459610027855153,
+            "f1-score": 0.7231686541737649,
+            "support": 1795
+        },
+        "TRUE": {
+            "precision": 0.31693989071038253,
+            "recall": 0.0940032414910859,
+            "f1-score": 0.145,
+            "support": 617
+        }
+    },
+    "confusion_matrix": {
+        "labels": [
+            "CONFLICTING",
+            "FALSE",
+            "TRUE"
+        ],
+        "matrix": [
+            [
+                0,
+                644,
+                28
+            ],
+            [
+                0,
+                1698,
+                97
+            ],
+            [
+                0,
+                559,
+                58
+            ]
+        ]
+    }
+}

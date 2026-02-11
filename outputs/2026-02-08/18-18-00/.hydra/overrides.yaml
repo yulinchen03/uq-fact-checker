@@ -1,4 +1,0 @@
-- mode=never_retrieve
-- data.dataset_name=scifact
-- experiment_name=rq1_baseline_never_retrieve
-- data.split=dev

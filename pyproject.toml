@@ -27,6 +27,7 @@ dependencies = [
     "minicheck[llm]",
     "ipykernel>=7.1.0",
     "datasets>=4.4.2",
+    "ijson>=3.4.0.post0",
 ]
 
 [tool.uv]

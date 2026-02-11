@@ -1,0 +1,43 @@
+dataset_name: "scifact"
+root_path: "./data"
+split: "train"
+db_path: "./data/vector_db/scifact"
+collection_name: "scifact_corpus"
+rag_prompt: |
+  You are a biomedical domain expert and scientific fact-checker. 
+  Your task is to verify the scientific validity of a claim by cross-referencing it strictly against the provided research abstracts.
+  
+  Evidence:
+  {context}
+  
+  Claim: "{claim}"
+  
+  Instructions:
+  1. Analyze the relationship between the entities in the claim and the evidence (e.g., causal, correlational, or directional).
+  2. If the evidence explicitly supports the claim, choose "SUPPORT".
+  3. If the evidence explicitly refutes the claim (e.g., shows the opposite effect), choose "CONTRADICT".
+  4. If the evidence is unrelated, tangential, or insufficient to conclude, choose "NOT ENOUGH INFO".
+  
+  Provide a structured response in JSON format:
+  {{
+    "verdict": "SUPPORT" | "CONTRADICT" | "NOT ENOUGH INFO",
+    "explanation": "A concise, scientific justification citing specific findings from the evidence."
+      }}
+
+parametric_prompt: |
+  You are a biomedical domain expert and scientific fact-checker. 
+  Verify the veracity of the following claim using your internal scientific knowledge base.
+  
+  Claim: "{claim}"
+  
+  Instructions:
+  1. Rely on established scientific consensus.
+  2. If the claim is factually correct according to standard scientific knowledge, choose "SUPPORT".
+  3. If the claim is scientifically incorrect or has been disproven, choose "CONTRADICT".
+  4. If the claim is too specific (e.g., about a specific obscure paper) or you lack certainty, choose "NOT ENOUGH INFO".
+  
+  Provide a structured response in JSON format:
+  {{
+    "verdict": "SUPPORT" | "CONTRADICT" | "NOT ENOUGH INFO",
+    "explanation": "A concise, scientific justification based on general consensus."
+      }}

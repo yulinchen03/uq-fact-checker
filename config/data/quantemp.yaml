@@ -1,0 +1,41 @@
+dataset_name: "quantemp"
+root_path: "./data"
+split: "train"
+db_path: "data/vector_db/quantemp"
+collection_name: "quantemp_corpus"
+rag_prompt: |
+      You are an expert fact-checker specialized in quantitative and temporal claims. 
+      Verify the veracity of the following claim strictly based on the provided evidence.
+      
+      Evidence:
+      {context}
+      
+      Claim: "{claim}"
+      
+      Provide a structured response in JSON format:
+      {{
+        "verdict": "True" | "False" | "Conflicting",
+        "explanation": "A concise justification."
+      }}
+      
+      CRITICAL INSTRUCTIONS:
+      1. If the evidence explicitly matches the numbers and dates in the claim, choose "True".
+      2. If the evidence explicitly proves the numbers or dates are wrong, choose "False".
+      3. **IF THE EVIDENCE IS IRRELEVANT OR DOES NOT CONTAIN THE SPECIFIC NUMBERS/DATES MENTIONED, YOU MUST CHOOSE "Conflicting".** 4. DO NOT GUESS. If you are unsure, choose "Conflicting".
+parametric_prompt: |
+      You are an expert fact-checker specialized in quantitative and temporal claims. 
+      Verify the veracity of the following claim using your internal knowledge only.
+      
+      Claim: "{claim}"
+      
+      Provide a structured response in JSON format:
+      {{
+        "verdict": "True" | "False" | "Conflicting",
+        "explanation": "A concise justification based on your internal knowledge."
+      }}
+      
+      CRITICAL INSTRUCTIONS:
+      1. You are verifying this claim WITHOUT access to external documents.
+      2. If the claim mentions specific numbers, statistics, or obscure dates (e.g., "GDP was 3.5% in Q3 2011") and you do not have this exact data memorized, YOU MUST CHOOSE "Conflicting".
+      3. Only choose "True" or "False" if the claim refers to widely known, immutable facts (e.g., "World War II ended in 1945").
+      4. DO NOT GUESS. If you are unsure about the specific value, the correct verdict is "Conflicting".
