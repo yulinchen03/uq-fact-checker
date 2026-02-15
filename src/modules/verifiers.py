@@ -13,7 +13,7 @@ class LLMVerifier(PipelineComponent):
 
     def process(self, sample):
         # 1. Select Template
-        if sample.mode == "always_retrieve":
+        if sample.mode == "always_retrieve" or sample.mode == "uq_aware":
             template = self.cfg.prompts.rag
             context = sample.aggregated_context if sample.aggregated_context else "No relevant evidence found."
             prompt = template.format(claim=sample.claim, context=context)
@@ -21,17 +21,13 @@ class LLMVerifier(PipelineComponent):
         elif sample.mode == "never_retrieve":
             template = self.cfg.prompts.parametric
             prompt = template.format(claim=sample.claim)
-
-        elif sample.mode == "UQ-aware":
-            # TODO: Implement uncertainty-aware logic to choose between RAG and parametric templates based on sample.uncertainty_score
-            pass
-            
+        
         else:
             raise ValueError(f"Unknown mode: {sample.mode}")
 
         # 2. Prepare Config (Map generic config to HF specific params)
         generation_config = {
-            "temperature": self.cfg.llm.get("temperature", 0.1),
+            # "temperature": self.cfg.llm.get("temperature", 0.1),
             "max_new_tokens": self.cfg.llm.get("max_new_tokens", 512), 
             "do_sample": self.cfg.llm.get("do_sample", False)
         }

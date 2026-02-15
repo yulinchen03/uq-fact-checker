@@ -4,7 +4,7 @@
     "total_claims": 3084,
     "metrics": {
         "balanced_accuracy": 0.3368619537131928,
-        "avg_latency_seconds": 1.674836980005497,
+        "avg_latency_seconds": 1.7232124935567479,
         "avg_token_overhead": 367.0129701686122
     },
     "per_class_metrics": {

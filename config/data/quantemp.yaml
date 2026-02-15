@@ -1,6 +1,6 @@
 dataset_name: "quantemp"
 root_path: "./data"
-split: "train"
+split: "val"
 db_path: "data/vector_db/quantemp"
 collection_name: "quantemp_corpus"
 rag_prompt: |

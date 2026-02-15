@@ -23,7 +23,7 @@ class VectorDBBuilder:
             model_name, 
             device=cfg.llm.device, 
             trust_remote_code=True,
-            model_kwargs={"dtype": torch.float16} 
+            model_kwargs={"torch_dtype": torch.float16} 
         )
         
         self.encoder.max_seq_length = 4096

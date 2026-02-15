@@ -22,6 +22,9 @@ class LocalLLMClient:
             logger.error(f"Failed to load model {model_name}: {e}")
             raise
 
+    def get_backend_objects(self):
+        return self.model, self.tokenizer
+
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
     def generate(self, prompt_text: str, config: dict) -> dict:
         """

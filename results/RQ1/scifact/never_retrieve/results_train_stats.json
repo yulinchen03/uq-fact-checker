@@ -3,27 +3,27 @@
     "dataset": "scifact",
     "total_claims": 809,
     "metrics": {
-        "balanced_accuracy": 0.39753278401100595,
-        "avg_latency_seconds": 1.4193293971841723,
-        "avg_token_overhead": 235.35105067985168
+        "balanced_accuracy": 0.41648675627364945,
+        "avg_latency_seconds": 1.9165996866143438,
+        "avg_token_overhead": 321.8355995055624
     },
     "per_class_metrics": {
         "CONTRADICT": {
-            "precision": 0.28431372549019607,
-            "recall": 0.1676300578034682,
-            "f1-score": 0.2109090909090909,
+            "precision": 0.3878787878787879,
+            "recall": 0.3699421965317919,
+            "f1-score": 0.378698224852071,
             "support": 173
         },
         "NOT ENOUGH INFO": {
-            "precision": 0.3829787234042553,
-            "recall": 0.29605263157894735,
-            "f1-score": 0.3339517625231911,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1-score": 0.0,
             "support": 304
         },
         "SUPPORT": {
-            "precision": 0.5127118644067796,
-            "recall": 0.7289156626506024,
-            "f1-score": 0.6019900497512438,
+            "precision": 0.453416149068323,
+            "recall": 0.8795180722891566,
+            "f1-score": 0.5983606557377049,
             "support": 332
         }
     },
@@ -35,19 +35,19 @@
         ],
         "matrix": [
             [
-                29,
-                83,
-                61
+                64,
+                0,
+                109
             ],
             [
-                45,
-                90,
-                169
+                61,
+                0,
+                243
             ],
             [
-                28,
-                62,
-                242
+                40,
+                0,
+                292
             ]
         ]
     }

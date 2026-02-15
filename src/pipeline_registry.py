@@ -9,7 +9,8 @@ from src.modules import (
     QueryGenerator, 
     VectorDBRetriever, 
     SimpleConcatAggregator, 
-    LLMVerifier
+    LLMVerifier,
+    UQAwareFlow
 )
 
 from src.utils.llm_client import LocalLLMClient
@@ -42,20 +43,55 @@ def build_pipeline(cfg: DictConfig) -> List[PipelineComponent]:
         pipeline.append(SimpleConcatAggregator(
             max_tokens=cfg.aggregator.get("max_context_tokens", 2000)
         ))
+
+        pipeline.append(LLMVerifier(
+            llm_client=llm_client, 
+            cfg=cfg,
+        ))
         
     elif cfg.mode == "never_retrieve":
-        pass
-        
-    elif cfg.mode == "UQ-aware":
-        pass 
-        
-    else:
-        raise ValueError(f"Unknown mode: {cfg.mode}")
-    
-    # 5. Add Verifier
-    pipeline.append(LLMVerifier(
+        pipeline.append(LLMVerifier(
         llm_client=llm_client, 
         cfg=cfg,
     ))
+        
+    elif cfg.mode == "uq_aware":
+        
+        # 1. Instantiate Tools (But DO NOT append to pipeline)
+        # Tool A: Retriever
+        retriever_tool = VectorDBRetriever(
+            collection=cfg.retriever.collection_name,
+            db_path=cfg.retriever.db_path,
+            embedding_model=cfg.retriever.embedding_model,
+            top_k=cfg.retriever.top_k,
+            device=cfg.llm.device,
+            debug=cfg.retriever.debug
+        )
+        
+        # Tool B: Aggregator
+        aggregator_tool = SimpleConcatAggregator(
+            max_tokens=cfg.aggregator.get("max_context_tokens", 2000)
+        )
+        
+        # Tool C: RAG Verifier
+        rag_verifier_tool = LLMVerifier(llm_client=llm_client, cfg=cfg)
+
+        model, tokenizer = llm_client.get_backend_objects()
+        
+        # 2. Instantiate the Orchestrator
+        uq_module = UQAwareFlow(
+            cfg=cfg,
+            retriever=retriever_tool,
+            aggregator=aggregator_tool,
+            rag_verifier=rag_verifier_tool,
+            model=model,
+            tokenizer=tokenizer
+        )
+        
+        # 3. Add ONLY the orchestrator to the pipeline
+        pipeline.append(uq_module) 
+        
+    else:
+        raise ValueError(f"Unknown mode: {cfg.mode}")
     
     return pipeline

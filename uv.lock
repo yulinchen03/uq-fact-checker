@@ -6272,6 +6272,7 @@ dependencies = [
     { name = "scikit-learn", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "sentence-transformers" },
     { name = "torch" },
+    { name = "transformers" },
     { name = "vllm" },
 ]
 
@@ -6301,6 +6302,7 @@ requires-dist = [
     { name = "scikit-learn" },
     { name = "sentence-transformers" },
     { name = "torch", specifier = ">=2.4.0", index = "https://download.pytorch.org/whl/cu130" },
+    { name = "transformers", specifier = ">=4.46.0" },
     { name = "vllm", specifier = ">=0.6.0" },
 ]
 

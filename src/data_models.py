@@ -19,10 +19,17 @@ class FactCheckSample(BaseModel):
     claim: str
     gold_label: Optional[str] = None
     gold_evidence: List[str] = Field(default_factory=list) 
-    mode: Literal["always_retrieve", "never_retrieve", "UQ-aware"]
+    mode: Literal["always_retrieve", "never_retrieve", "uq_aware"]
     search_queries: List[str] = Field(default_factory=list)
     retrieved_evidence: List[Document] = Field(default_factory=list)
     aggregated_context: str = ""
     predicted_verdict: Optional[str] = None
     explanation: Optional[str] = None
     metrics: FactCheckMetrics = Field(default_factory=FactCheckMetrics)
+
+    # --- UQ SPECIFIC FIELDS ---
+    uncertainty_score: Optional[float] = None
+    parametric_response: Optional[str] = None
+    parametric_verdict: Optional[str] = None
+    retrieval_triggered: bool = False
+    rag_prediction: Optional[str] = None

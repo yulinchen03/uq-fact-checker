@@ -3,6 +3,8 @@ from .generators import QueryGenerator
 from .retrievers import BaseRetriever, VectorDBRetriever, NoOpRetriever
 from .aggregators import SimpleConcatAggregator
 from .verifiers import LLMVerifier
+from .uq import UQEstimator, LMPolygraphWrapper
+from .uq_flow import UQAwareFlow
 
 __all__ = [
     "PipelineComponent",
@@ -11,5 +13,8 @@ __all__ = [
     "VectorDBRetriever", 
     "NoOpRetriever",
     "SimpleConcatAggregator",
-    "LLMVerifier"
+    "LLMVerifier",
+    "UQEstimator",
+    "LMPolygraphWrapper",
+    "UQAwareFlow"
 ]
