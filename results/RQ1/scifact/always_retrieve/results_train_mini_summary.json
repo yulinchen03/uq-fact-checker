@@ -1,0 +1,56 @@
+{
+    "experiment_mode": "always_retrieve",
+    "dataset": "scifact",
+    "split": "train_mini",
+    "total_claims": 160,
+    "metrics": {
+        "balanced_accuracy": 0.7457219251336898,
+        "avg_latency_seconds": 18.062,
+        "avg_token_overhead": 1622,
+        "retrieval_trigger_rate": 100.0
+    },
+    "per_class_metrics": {
+        "SUPPORT": {
+            "precision": 0.8679245283018868,
+            "recall": 0.696969696969697,
+            "f1-score": 0.773109243697479,
+            "support": 66
+        },
+        "CONTRADICT": {
+            "precision": 0.6829268292682927,
+            "recall": 0.8235294117647058,
+            "f1-score": 0.7466666666666667,
+            "support": 34
+        },
+        "NOT ENOUGH INFO": {
+            "precision": 0.6515151515151515,
+            "recall": 0.7166666666666667,
+            "f1-score": 0.6825396825396826,
+            "support": 60
+        }
+    },
+    "confusion_matrix": {
+        "labels": [
+            "SUPPORT",
+            "CONTRADICT",
+            "NOT ENOUGH INFO"
+        ],
+        "matrix": [
+            [
+                46,
+                3,
+                17
+            ],
+            [
+                0,
+                28,
+                6
+            ],
+            [
+                7,
+                10,
+                43
+            ]
+        ]
+    }
+}

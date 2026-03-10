@@ -1,5 +1,0 @@
-Method,Avg Score,Std Dev,Min,Max,Median,Avg Time
-MeanTokenEntropy,0.8556,0.2699,0.3051,1.7123,0.8447,2.0057
-MaximumTokenProbability,0.4663,0.0376,0.3946,0.5809,0.4665,1.9863
-MaximumSequenceProbability,19.8978,10.8001,2.9688,60.5871,19.3545,1.9815
-Perplexity,0.3514,0.1317,0.1024,0.7393,0.356,1.9846

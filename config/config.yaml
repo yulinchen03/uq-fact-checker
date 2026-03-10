@@ -10,19 +10,19 @@ retriever:
   db_path: ${data.db_path}
   collection_name: ${data.collection_name}
   embedding_model: "BAAI/bge-m3"
-  top_k: 3
-  debug: false
+  top_k: ${data.top_k}
+  debug: False
 
 llm:
   provider: "local_huggingface"
-  model_name: "Qwen/Qwen2.5-1.5B-Instruct"
+  model_name: "Qwen/Qwen3-4B-Instruct-2507"
   device: "cuda"
-  max_new_tokens: 512
+  max_new_tokens: 1024
   do_sample: False
-  debug: false
+  debug: False
 
 aggregator:
-  max_context_tokens: 8000
+  max_context_tokens: ${data.max_context_tokens}
 
 prompts:
   rag: ${data.rag_prompt}

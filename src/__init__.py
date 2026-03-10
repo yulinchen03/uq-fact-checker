@@ -5,7 +5,7 @@ from .data_models import (
 )
 
 # Expose the pipeline builder
-from .pipeline_registry import build_pipeline
+from .pipeline_builder import build_pipeline
 
 # Expose the loader (optional, but convenient)
-from .data.loader import LocalDataLoader
+from .utils.loader import LocalDataLoader

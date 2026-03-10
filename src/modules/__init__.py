@@ -1,20 +1,19 @@
-from .base import PipelineComponent
-from .generators import QueryGenerator
-from .retrievers import BaseRetriever, VectorDBRetriever, NoOpRetriever
-from .aggregators import SimpleConcatAggregator
-from .verifiers import LLMVerifier
-from .uq import UQEstimator, LMPolygraphWrapper
-from .uq_flow import UQAwareFlow
+from .abstract_components import PipelineComponent
+from .retriever import BaseRetriever, VectorDBRetriever, SkipRetriever
+from .aggregator import EvidenceAggregator
+from .verifier import LLMVerifier
+from .uncertainty_aware_verifier import UQEstimator, LMPolygraphWrapper
+from .uncertainty_aware_pipeline import UncertaintyAwarePipeline
 
 __all__ = [
     "PipelineComponent",
     "QueryGenerator",
     "BaseRetriever",
     "VectorDBRetriever", 
-    "NoOpRetriever",
-    "SimpleConcatAggregator",
+    "SkipRetriever",
+    "EvidenceAggregator",
     "LLMVerifier",
     "UQEstimator",
     "LMPolygraphWrapper",
-    "UQAwareFlow"
+    "UncertaintyAwarePipeline"
 ]

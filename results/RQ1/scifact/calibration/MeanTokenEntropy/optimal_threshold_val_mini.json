@@ -1,0 +1,8 @@
+{
+    "dataset": "scifact",
+    "uq_method": "MeanTokenEntropy",
+    "optimal_threshold": 0.23157603202805505,
+    "tolerance_delta": 0.05,
+    "calibrated_accuracy": 0.827020202020202,
+    "aurc": 0.5306889966927728
+}
