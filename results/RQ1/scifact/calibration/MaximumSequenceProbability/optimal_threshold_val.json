@@ -1,0 +1,8 @@
+{
+    "dataset": "scifact",
+    "uq_method": "MaximumSequenceProbability",
+    "optimal_threshold": 16.963194803536446,
+    "tolerance_delta": 0.05,
+    "calibrated_accuracy": 0.7035330261136713,
+    "aurc": 0.551583884272615
+}

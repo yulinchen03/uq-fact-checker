@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 
@@ -25,8 +26,8 @@ class UncertaintyAwarePipeline(PipelineComponent):
             gen_params = GenerationParameters(
                 temperature=None,
                 do_sample=False,
-                max_new_tokens=max_tokens, # lm polygraph defaults to 100, this is too short. Use our config instead
-                stop_strings=["```", "```json", "<|im_end|>"]
+                max_new_tokens=max_tokens,
+                stop_strings=["<|im_end|>"]
             )
             
             self.whitebox_model = WhiteboxModel(
@@ -92,9 +93,17 @@ class UncertaintyAwarePipeline(PipelineComponent):
 
         if not should_retrieve:
             # [CASE A: CONFIDENT] 
-            # Stop here. Use parametric answer as final.
             sample.predicted_verdict = sample.parametric_verdict
-            sample.explanation = f"Parametric Confidence (Score: {score:.4f})"
+            
+            # Attempt to parse the actual explanation from the LLM's JSON output
+            try:
+                # Clean markdown formatting if the model still outputs it
+                clean_response = response.strip().strip("`").removeprefix("json").strip()
+                parsed_json = json.loads(clean_response)
+                sample.explanation = parsed_json.get("explanation", "No explanation provided by model.")
+            except json.JSONDecodeError:
+                sample.explanation = f"Failed to parse explanation. Raw output: {response}"
+                
             sample.retrieval_triggered = False
             return sample
 

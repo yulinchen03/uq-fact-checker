@@ -100,16 +100,7 @@ class LocalLLMClient:
                     do_sample=do_sample,
                     stopping_criteria=stopping_criteria,
                     pad_token_id=self.tokenizer.eos_token_id,
-                    eos_token_id=self.tokenizer.eos_token_id # Added this for native safety!
-                )
-
-            # 4. Inference
-            with torch.no_grad():
-                generated_ids = self.model.generate(
-                    **inputs,
-                    max_new_tokens=max_new_tokens,
-                    stopping_criteria=stopping_criteria,          # Inject the stopper
-                    pad_token_id=self.tokenizer.eos_token_id      # Best practice for HF generate
+                    eos_token_id=self.tokenizer.eos_token_id
                 )
 
             # 5. Decode Output (Slice to remove input tokens)

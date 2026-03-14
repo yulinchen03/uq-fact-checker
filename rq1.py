@@ -90,7 +90,8 @@ def get_experiment_config():
 
         inquirer.List('test_split',
                       message="Select the test data split",
-                      choices=['train', 'val', 'test', 'train_mini', 'val_mini', 'test_mini']),
+                      choices=['train', 'val', 'test', 'train_mini', 'val_mini', 'test_mini'],
+                      ignore=lambda answers: answers.get('calibration') == 'Yes'),
     ]
 
     return inquirer.prompt(questions)

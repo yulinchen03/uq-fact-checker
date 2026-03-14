@@ -33,6 +33,9 @@ def run_batch_experiments(experiment_queue):
                             config["calibrated_split"] = config["calibration_split"]
                             env["AUTO_CONFIG"] = json.dumps(config) 
 
+                            print('Visualizing calibration results...')
+                            plot_result = subprocess.run(["python", "visualize_rq1_statistics.py"], env=env)
+                            
                             exp_result = subprocess.run(["python", "rq1.py"], env=env)
 
                             if exp_result.returncode != 0:
@@ -62,57 +65,57 @@ def run_batch_experiments(experiment_queue):
 if __name__ == "__main__":
     jobs_queue = [
         # --- SCIFACT ---
-        # {
-        #     "dataset": "scifact",
-        #     "mode": "never_retrieve",
-        #     "test_split": "train_mini" 
-        # },
-        # {
-        #     "dataset": "scifact",
-        #     "mode": "always_retrieve",
-        #     "test_split": "train_mini" 
-        # },
-        # {
-        #     "dataset": "scifact",
-        #     "mode": "uq_aware",
-        #     "uq_method": "Perplexity",
-        #     "calibration": "No",
-        #     # "tolerance": "0.05",
-        #     # "calibration_split": "val_mini",
-        #     "calibrated_split": "val_mini",
-        #     "test_split": "train_mini" 
-        # },
-        # {
-        #     "dataset": "scifact",
-        #     "mode": "uq_aware",
-        #     "uq_method": "MaximumSequenceProbability",
-        #     "calibration": "No",
-        #     # "tolerance": "0.05",
-        #     # "calibration_split": "val_mini",
-        #     "calibrated_split": "val_mini",
-        #     "test_split": "train_mini" 
-        # },
-        # {
-        #     "dataset": "scifact",
-        #     "mode": "uq_aware",
-        #     "uq_method": "MeanTokenEntropy",
-        #     "calibration": "No",
-        #     # "tolerance": "0.05",
-        #     # "calibration_split": "val_mini",
-        #     "calibrated_split": "val_mini",
-        #     "test_split": "train_mini" 
-        # },
+        {
+            "dataset": "scifact",
+            "mode": "never_retrieve",
+            "test_split": "train" 
+        },
+        {
+            "dataset": "scifact",
+            "mode": "always_retrieve",
+            "test_split": "train" 
+        },
+        {
+            "dataset": "scifact",
+            "mode": "uq_aware",
+            "uq_method": "Perplexity",
+            "calibration": "Yes",
+            "tolerance": "0.05",
+            "calibration_split": "val",
+            # "calibrated_split": "val",
+            "test_split": "train" 
+        },
+        {
+            "dataset": "scifact",
+            "mode": "uq_aware",
+            "uq_method": "MaximumSequenceProbability",
+            "calibration": "Yes",
+            "tolerance": "0.05",
+            "calibration_split": "val",
+            # "calibrated_split": "val",
+            "test_split": "train" 
+        },
+        {
+            "dataset": "scifact",
+            "mode": "uq_aware",
+            "uq_method": "MeanTokenEntropy",
+            "calibration": "Yes",
+            "tolerance": "0.05",
+            "calibration_split": "val",
+            # "calibrated_split": "val",
+            "test_split": "train" 
+        },
         # --- QUANTEMP ---
-        # {
-        #     "dataset": "quantemp",
-        #     "test_split": "test_mini",
-        #     "mode": "never_retrieve"
-        # },
-        # {
-        #     "dataset": "quantemp",
-        #     "test_split": "test_mini",
-        #     "mode": "always_retrieve"
-        # },
+        {
+            "dataset": "quantemp",
+            "test_split": "test_mini",
+            "mode": "never_retrieve"
+        },
+        {
+            "dataset": "quantemp",
+            "test_split": "test_mini",
+            "mode": "always_retrieve"
+        },
         {
             "dataset": "quantemp",
             "mode": "uq_aware",

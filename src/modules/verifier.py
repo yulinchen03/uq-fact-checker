@@ -34,6 +34,7 @@ class LLMVerifier(PipelineComponent):
         # 3. Generate
         # We assume llm_client.generate takes the raw prompt string
         response = self.llm_client.generate(prompt, generation_config)
+        print(response)
 
         # 4. Record Metrics
         # Use the helper class because sample.metrics is a Pydantic object, not a dict
