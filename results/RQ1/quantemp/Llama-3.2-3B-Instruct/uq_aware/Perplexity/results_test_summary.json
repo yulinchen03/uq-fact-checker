@@ -1,0 +1,61 @@
+{
+    "experiment_mode": "uq_aware",
+    "dataset": "quantemp",
+    "split": "test",
+    "total_claims": 2495,
+    "metrics": {
+        "balanced_accuracy": 0.3667706852731089,
+        "avg_latency_seconds": 3.888,
+        "avg_token_overhead": 1155,
+        "retrieval_trigger_rate": 79.8
+    },
+    "uq_settings": {
+        "method": "Perplexity",
+        "calibration": "No",
+        "threshold": 0.0
+    },
+    "per_class_metrics": {
+        "TRUE": {
+            "precision": 0.2675324675324675,
+            "recall": 0.21729957805907174,
+            "f1-score": 0.239813736903376,
+            "support": 474
+        },
+        "FALSE": {
+            "precision": 0.6013272077590608,
+            "recall": 0.8278285312719607,
+            "f1-score": 0.6966292134831461,
+            "support": 1423
+        },
+        "CONFLICTING": {
+            "precision": 0.2214765100671141,
+            "recall": 0.05518394648829431,
+            "f1-score": 0.08835341365461848,
+            "support": 598
+        }
+    },
+    "confusion_matrix": {
+        "labels": [
+            "TRUE",
+            "FALSE",
+            "CONFLICTING"
+        ],
+        "matrix": [
+            [
+                103,
+                328,
+                42
+            ],
+            [
+                171,
+                1178,
+                74
+            ],
+            [
+                111,
+                453,
+                33
+            ]
+        ]
+    }
+}

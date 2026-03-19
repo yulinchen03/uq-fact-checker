@@ -1,0 +1,8 @@
+{
+    "dataset": "quantemp",
+    "uq_method": "MaximumSequenceProbability",
+    "optimal_threshold": 2997.15870140625,
+    "tolerance_delta": 0.05,
+    "calibrated_accuracy": 0.3624922122950931,
+    "aurc": 0.4600167188366459
+}
