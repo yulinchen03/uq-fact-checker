@@ -32,3 +32,6 @@ class MetricsRecorder:
         if hasattr(sample, 'metrics'):
             sample.metrics.input_tokens += input_tokens
             sample.metrics.output_tokens += output_tokens
+
+        # print(f"Input: {input_tokens} tokens")
+        # print(f"Output: {output_tokens} tokens")

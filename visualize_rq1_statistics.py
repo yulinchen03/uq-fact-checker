@@ -2,7 +2,9 @@ import inspect
 import os
 import string
 import sys
+import hydra
 import inquirer
+from omegaconf import DictConfig
 import pandas as pd
 import numpy as np
 import json
@@ -207,9 +209,8 @@ def get_experiment_config():
 
     return inquirer.prompt(questions)
 
-# --- Execution ---
-if __name__ == "__main__":
-
+@hydra.main(version_base=None, config_path="config", config_name="config")
+def main(cfg: DictConfig):
     config = get_experiment_config()
         
     if not config:
@@ -219,12 +220,17 @@ if __name__ == "__main__":
     dataset = config['dataset']
     uq_method = config['uq_method']
     calibrated_split = config['calibrated_split']
+    model_name = cfg.llm.model_name.split("/")[1]
 
     # Replace with your actual filepath
-    path = f"results/RQ1/{dataset}/calibration/{uq_method}/results_{calibrated_split}.jsonl"
-    save_path = f"vis/RQ1/{dataset}/calibration/{uq_method}/{calibrated_split}"
+    path = f"results/RQ1/{dataset}/{model_name}/calibration/{uq_method}/results_{calibrated_split}.jsonl"
+    save_path = f"vis/RQ1/{dataset}/{model_name}/calibration/{uq_method}/{calibrated_split}"
 
     os.makedirs(save_path, exist_ok=True)
 
     df_calibration = load_calibration_data(path, dataset)
     generate_all_plots(df_calibration, save_path)
+
+# --- Execution ---
+if __name__ == "__main__":
+    main()

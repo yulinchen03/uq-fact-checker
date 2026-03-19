@@ -1,8 +1,10 @@
 import inspect
 import json
 from collections import Counter
+import hydra
 import lm_polygraph.estimators as estimators
 import inquirer
+from omegaconf import DictConfig
 
 def get_config():
 
@@ -31,7 +33,24 @@ def get_config():
 
     return inquirer.prompt(questions)
 
-def main(results_path):
+@hydra.main(version_base=None, config_path="config", config_name="config")
+def main(cfg: DictConfig):
+    config = get_config()
+    dataset = config['dataset']
+    mode = config['mode']
+    split = config['split'] if 'split' in config else 'N/A'
+    uq_method = config.get('uq_method', 'N/A')
+    model_name = cfg.llm.model_name.split("/")[1]
+
+    # Construct the path to the results file based on the selected configuration
+    if mode == 'uq_aware':
+        results_path = f"results/RQ1/{dataset}/{model_name}/{mode}/{uq_method}/results_{split}.jsonl"
+    elif mode == 'calibration':
+        results_path = f"results/RQ1/{dataset}/{model_name}/calibration/{uq_method}/results_val.jsonl"
+    else:   
+        results_path = f"results/RQ1/{dataset}/{model_name}/{mode}/results_{split}.jsonl"
+    print(results_path)
+
     # Initialize counters
     gold_labels = Counter()
     predicted_verdicts = Counter()
@@ -56,21 +75,4 @@ def main(results_path):
         print(f"{verdict}: {count}")
 
 if __name__ == "__main__":
-    config = get_config()
-    dataset = config['dataset']
-    mode = config['mode']
-    split = config['split'] if 'split' in config else 'N/A'
-    uq_method = config.get('uq_method', 'N/A')
-
-    print(split)
-
-    # Construct the path to the results file based on the selected configuration
-    if mode == 'uq_aware':
-        results_path = f"results/RQ1/{dataset}/{mode}/{uq_method}/results_{split}.jsonl"
-    elif mode == 'calibration':
-        results_path = f"results/RQ1/{dataset}/calibration/{uq_method}/results_val.jsonl"
-    else:   
-        results_path = f"results/RQ1/{dataset}/{mode}/results_{split}.jsonl"
-    print(results_path)
-    
-    main(results_path)
+    main()

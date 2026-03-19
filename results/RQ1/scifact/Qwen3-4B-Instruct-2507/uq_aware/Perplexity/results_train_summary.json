@@ -1,0 +1,61 @@
+{
+    "experiment_mode": "uq_aware",
+    "dataset": "scifact",
+    "split": "train",
+    "total_claims": 809,
+    "metrics": {
+        "balanced_accuracy": 0.7088975769216201,
+        "avg_latency_seconds": 1.435,
+        "avg_token_overhead": 942,
+        "retrieval_trigger_rate": 84.55
+    },
+    "uq_settings": {
+        "method": "Perplexity",
+        "calibration": "No",
+        "threshold": 0.0
+    },
+    "per_class_metrics": {
+        "SUPPORT": {
+            "precision": 0.8267716535433071,
+            "recall": 0.6325301204819277,
+            "f1-score": 0.7167235494880546,
+            "support": 332
+        },
+        "CONTRADICT": {
+            "precision": 0.5921052631578947,
+            "recall": 0.7803468208092486,
+            "f1-score": 0.6733167082294265,
+            "support": 173
+        },
+        "NOT ENOUGH INFO": {
+            "precision": 0.6636085626911316,
+            "recall": 0.7138157894736842,
+            "f1-score": 0.687797147385103,
+            "support": 304
+        }
+    },
+    "confusion_matrix": {
+        "labels": [
+            "SUPPORT",
+            "CONTRADICT",
+            "NOT ENOUGH INFO"
+        ],
+        "matrix": [
+            [
+                210,
+                44,
+                78
+            ],
+            [
+                6,
+                135,
+                32
+            ],
+            [
+                38,
+                49,
+                217
+            ]
+        ]
+    }
+}

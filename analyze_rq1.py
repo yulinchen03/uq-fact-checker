@@ -70,6 +70,7 @@ def normalize_label(label, dataset_name):
             "SUPPORTED": "SUPPORT", 
             # (Thought) Partial support means the claim as a whole cannot be verified with given evidence/knowledge.
             "PARTIAL SUPPORT": "NOT ENOUGH INFO", 
+            "PARTIALLY": "NOT ENOUGH INFO",
             "REFUTED": "CONTRADICT", 
             "NEI": "NOT ENOUGH INFO", 
             "NOT": "NOT ENOUGH INFO"
@@ -102,6 +103,7 @@ def analyze_results(cfg: DictConfig):
     # 2. Set strict Hydra config overrides
     cfg.data.dataset_name = config['dataset']
     cfg.mode = config['mode']
+    model_name = cfg.llm.model_name.split("/")[1]
 
     # Explicitly set the split and calibration mode
     if cfg.mode == 'uq_aware':
@@ -119,14 +121,14 @@ def analyze_results(cfg: DictConfig):
     # 3. Define Paths
     if cfg.mode == 'uq_aware':
         if cfg.uncertainty.calibration_mode:
-            file_path = f"results/RQ1/{cfg.data.dataset_name}/calibration/{cfg.uncertainty.method}/results.jsonl"
-            save_path = f"results/RQ1/{cfg.data.dataset_name}/calibration/{cfg.uncertainty.method}/results_summary.json"
+            file_path = f"results/RQ1/{cfg.data.dataset_name}/{model_name}/calibration/{cfg.uncertainty.method}/results.jsonl"
+            save_path = f"results/RQ1/{cfg.data.dataset_name}/{model_name}/calibration/{cfg.uncertainty.method}/results_summary.json"
         else:
-            file_path = f"results/RQ1/{cfg.data.dataset_name}/uq_aware/{cfg.uncertainty.method}/results_{cfg.data.split}.jsonl"
-            save_path = f"results/RQ1/{cfg.data.dataset_name}/{cfg.mode}/{cfg.uncertainty.method}/results_{cfg.data.split}_summary.json"
+            file_path = f"results/RQ1/{cfg.data.dataset_name}/{model_name}/uq_aware/{cfg.uncertainty.method}/results_{cfg.data.split}.jsonl"
+            save_path = f"results/RQ1/{cfg.data.dataset_name}/{model_name}/{cfg.mode}/{cfg.uncertainty.method}/results_{cfg.data.split}_summary.json"
     else:
-        file_path = f"results/RQ1/{cfg.data.dataset_name}/{cfg.mode}/results_{cfg.data.split}.jsonl"
-        save_path = f"results/RQ1/{cfg.data.dataset_name}/{cfg.mode}/results_{cfg.data.split}_summary.json"
+        file_path = f"results/RQ1/{cfg.data.dataset_name}/{model_name}/{cfg.mode}/results_{cfg.data.split}.jsonl"
+        save_path = f"results/RQ1/{cfg.data.dataset_name}/{model_name}/{cfg.mode}/results_{cfg.data.split}_summary.json"
 
     if not Path(file_path).exists():
         print(f"Error: Results file not found at {file_path}")

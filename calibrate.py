@@ -1,10 +1,12 @@
 import inspect
 import json
 import os
+import hydra
 import numpy as np
 import inquirer
 import matplotlib.pyplot as plt
 import lm_polygraph.estimators as estimators
+from omegaconf import DictConfig
 from sklearn.metrics import auc, recall_score
 import torch
 import random
@@ -155,11 +157,11 @@ def optimize_threshold_and_plot(file_path, save_dir, dataset_name, uq_method, de
         target_acc = acc_para 
         print(f"Target Hybrid Accuracy:     >= {target_acc:.4f}")
     elif gap <= delta:  # e.g max tolerable loss: 5%, parametric performs at 97% relative to rag, then target acc is (0.97+(1-0.97)/2)*rag score
-        target_acc = acc_para + ((acc_rag - acc_para) / 2) # midway accuracy between parametric and rag
-        print(f"Target Hybrid Accuracy:     >= {target_acc:.4f} (Midpoint accuracy applied)")
+        target_acc = acc_rag - ((acc_rag - acc_para) * delta) #  max tolerable loss as a percentage of the accuracy gap between rag and parametric
+        print(f"Target Hybrid Accuracy:     >= {target_acc:.4f} (Dynamic Relative Delta applied)")
     else:  # if target is still greater than parametric performance
         target_acc = acc_rag * (1 - delta) # maximum tolerable loss
-        print(f"Target Hybrid Accuracy:     >= {target_acc:.4f} (Applying Delta: {delta*100}%)")
+        print(f"Target Hybrid Accuracy:     >= {target_acc:.4f} (Applying Fixed Delta: {delta*100}%)")
         
     print("-" * 30)
     
@@ -251,7 +253,8 @@ def optimize_threshold_and_plot(file_path, save_dir, dataset_name, uq_method, de
 
     return best_thresh, best_acc, calculated_aurc
 
-def main():
+@hydra.main(version_base=None, config_path="config", config_name="config")
+def main(cfg: DictConfig):
     lock_random_seeds(42)
 
     config = get_config()
@@ -260,8 +263,10 @@ def main():
         return
         
     delta = float(config['tolerance'])
+
+    model_name = cfg.llm.model_name.split("/")[1]
     
-    base_dir = f"results/RQ1/{config['dataset']}/calibration/{config['uq_method']}"
+    base_dir = f"results/RQ1/{config['dataset']}/{model_name}/calibration/{config['uq_method']}"
     path = f"{base_dir}/results_{config['calibration_split']}.jsonl"
     save_path = f"{base_dir}/optimal_threshold_{config['calibration_split']}.json"
     

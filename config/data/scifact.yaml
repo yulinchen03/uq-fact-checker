@@ -4,8 +4,8 @@ split: "train"
 calibrated_split: "val"
 db_path: "./data/vector_db/scifact"
 collection_name: "scifact_corpus"
-max_context_tokens: 1200 # 95th percentile length of all corpus docs (585) * top_k + buffer
-top_k: 2
+max_context_tokens: 600 # 95th percentile length of all corpus docs (585) * top_k + buffer
+top_k: 1
 
 rag_prompt: |
   You are a biomedical domain expert and scientific fact-checker. 
@@ -13,22 +13,21 @@ rag_prompt: |
   
   CRITICAL INSTRUCTIONS:
   1. Choose "SUPPORT" ONLY IF the evidence explicitly contains scientific findings or data that confirm the claim.
-  2. Choose "CONTRADICT" ONLY IF the evidence explicitly contains findings or data that prove the claim is scientifically incorrect (e.g., shows the opposite effect or different numbers).
+  2. Choose "CONTRADICT" ONLY IF the evidence explicitly contains findings or data that prove the claim is scientifically incorrect.
   3. Choose "NOT ENOUGH INFO" IF the evidence is unrelated, tangential, or insufficient to make a definitive scientific conclusion. DO NOT GUESS.
-  4. Keep your explanation concise and directly tied to the evidence, referencing specific facts or data points from the evidence that support your verdict. Keep it short!
-  5. CRITICAL: Do not output any internal thinking, reasoning, or <think> tags inside or outside the JSON.
-  6. SCHEMA REQUIREMENT: You MUST output a valid JSON object. You MUST provide your "explanation" FIRST to show your step-by-step reasoning, followed by the "verdict".
-  
-  REQUIRED JSON FORMAT:
+  4. Explanation: Limit to MAX 2 sentences. State only the relevant scientific fact or data point from the evidence that led to your verdict.
+  5. Format: Return a valid JSON object. Provide "explanation" then "verdict".
+  6. Constraint: Do not repeat the claim text. Do not provide background history or filler phrases.
+  7. No <think> tags or internal reasoning.
+
+  REQUIRED FORMAT:
   {{
-    "explanation": "<your concise step-by-step reasoning here>",
+    "explanation": "<max 2 sentences>",
     "verdict": "<SUPPORT, CONTRADICT, or NOT ENOUGH INFO>"
   }}
 
   Evidence: "{context}"
-  
   Claim: "{claim}"
-  
   Response:
   ```json
 
@@ -39,18 +38,18 @@ parametric_prompt: |
   CRITICAL INSTRUCTIONS:
   1. Choose "SUPPORT" ONLY IF the claim is factually correct according to standard, universally accepted scientific consensus.
   2. Choose "CONTRADICT" ONLY IF the claim is scientifically incorrect or has been definitively disproven.
-  3. Choose "NOT ENOUGH INFO" IF the claim is too specific (e.g., referencing a highly specific obscure paper, strict epidemiological statistics) and you lack absolute certainty. DO NOT GUESS.
-  4. Keep your explanation concise and directly tied to the claim, referencing specific facts or widely accepted knowledge that supports your verdict. Keep it short!
-  5. CRITICAL: Do not output any internal thinking, reasoning, or <think> tags inside or outside the JSON.
-  6. SCHEMA REQUIREMENT: You MUST output a valid JSON object. You MUST provide your "explanation" FIRST to show your step-by-step reasoning, followed by the "verdict".
+  3. Choose "NOT ENOUGH INFO" IF the claim is too specific (e.g., referencing a highly specific obscure paper) and you lack absolute certainty. DO NOT GUESS.
+  4. Explanation: Limit to MAX 2 sentences. State only the relevant fact that led to your verdict.
+  5. Format: Return a valid JSON object. Provide "explanation" then "verdict".
+  6. Constraint: Do not repeat the claim. Do not provide background history.
+  7. No <think> tags or internal reasoning.
 
-  REQUIRED JSON FORMAT:
+  REQUIRED FORMAT:
   {{
-    "explanation": "<your concise step-by-step reasoning here>",
+    "explanation": "<max 2 sentences>",
     "verdict": "<SUPPORT, CONTRADICT, or NOT ENOUGH INFO>"
   }}
 
   Claim: "{claim}"
-  
   Response:
   ```json

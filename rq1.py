@@ -8,7 +8,6 @@ import time
 from pathlib import Path
 import numpy as np
 from omegaconf import DictConfig
-import torch
 from tqdm import tqdm
 from dotenv import load_dotenv
 from src.pipeline_builder import build_pipeline
@@ -18,6 +17,20 @@ import inspect
 import inquirer
 import lm_polygraph.estimators as estimators
 from transformers import set_seed
+
+# --- PREVENT MEMORY FRAGMENTATION ---
+os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
+
+import multiprocessing as mp
+# This forces Python to spawn fresh processes instead of cloning locked CUDA memory.
+try:
+    mp.set_start_method('spawn', force=True)
+except RuntimeError:
+    pass
+
+# Tell vLLM explicitly to use spawn
+os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
+import torch
 
 def lock_random_seeds(seed: int = 42):
     """Locks all random number generators for deterministic pipeline execution."""
@@ -110,11 +123,13 @@ def main(cfg: DictConfig):
     else:
         raise ValueError(f"Unsupported dataset: {cfg.data.dataset_name}")
     
+    model_name = cfg.llm.model_name.split("/")[1]
+    
     if cfg.mode == 'uq_aware':
         if not cfg.uncertainty.calibration_mode:
             # Dynamically fetch the split the user said they calibrated on
             calib_split = cfg.data.calibrated_split
-            calibrated_thresh_path = Path(f"results/RQ1/{cfg.data.dataset_name}/calibration/{cfg.uncertainty.method}/optimal_threshold_{calib_split}.json")
+            calibrated_thresh_path = Path(f"results/RQ1/{cfg.data.dataset_name}/{model_name}/calibration/{cfg.uncertainty.method}/optimal_threshold_{calib_split}.json")
             
             if calibrated_thresh_path.exists():
                 with open(calibrated_thresh_path, 'r') as f:
@@ -128,7 +143,7 @@ def main(cfg: DictConfig):
         # Default fallbacks for non-UQ modes
         cfg.uncertainty.method = "UQ module disabled"
         cfg.uncertainty.threshold = 0.0
-        cfg.uncertainty.calibration_mode = False
+        cfg.uncertainty.calibration_mode = False 
 
     # 3. Print Execution Summary
     print(f"\n🚀 Starting run on {cfg.data.dataset_name} ({cfg.data.split})")
@@ -152,11 +167,11 @@ def main(cfg: DictConfig):
     
     # 6. Define Output Path
     if cfg.uncertainty.calibration_mode:
-        output_dir = Path("results/RQ1") / cfg.data.dataset_name / "calibration" / cfg.uncertainty.method
+        output_dir = Path("results/RQ1") / cfg.data.dataset_name / model_name / "calibration" / cfg.uncertainty.method
     elif cfg.mode == "uq_aware":
-        output_dir = Path("results/RQ1") / cfg.data.dataset_name / "uq_aware" / cfg.uncertainty.method
+        output_dir = Path("results/RQ1") / cfg.data.dataset_name / model_name / "uq_aware" / cfg.uncertainty.method
     else:
-        output_dir = Path("results/RQ1") / cfg.data.dataset_name / cfg.mode
+        output_dir = Path("results/RQ1") / cfg.data.dataset_name / model_name / cfg.mode
         
     output_dir.mkdir(parents=True, exist_ok=True)
     
@@ -217,3 +232,10 @@ if __name__ == "__main__":
 
     # Launch Hydra (do not pass custom arguments directly here)
     main()
+
+    try:
+        import torch.distributed as dist
+        if dist.is_available() and dist.is_initialized():
+            dist.destroy_process_group()
+    except Exception:
+        pass

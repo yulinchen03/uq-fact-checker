@@ -1,0 +1,8 @@
+{
+    "dataset": "quantemp",
+    "uq_method": "MeanTokenEntropy",
+    "optimal_threshold": 0.3523248339907304,
+    "tolerance_delta": 0.05,
+    "calibrated_accuracy": 0.36824971475537716,
+    "aurc": 0.3302485901941033
+}

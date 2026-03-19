@@ -1,0 +1,8 @@
+{
+    "dataset": "quantemp",
+    "uq_method": "Perplexity",
+    "optimal_threshold": 0.38554840754602493,
+    "tolerance_delta": 0.05,
+    "calibrated_accuracy": 0.36753011210067094,
+    "aurc": 0.34186911364671496
+}

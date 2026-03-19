@@ -34,7 +34,6 @@ class LLMVerifier(PipelineComponent):
         # 3. Generate
         # We assume llm_client.generate takes the raw prompt string
         response = self.llm_client.generate(prompt, generation_config)
-        print(response)
 
         # 4. Record Metrics
         # Use the helper class because sample.metrics is a Pydantic object, not a dict
@@ -45,14 +44,10 @@ class LLMVerifier(PipelineComponent):
             output_tokens=usage.get("output_tokens", 0)
         )
 
-        if self.cfg.llm.debug:
-            print("x"*100)
-            print("raw response:")
-            print(response)
-            print("x"*100)
-
         # 5. Parse Response
         verdict, explanation = self._parse_response(response.get("content", ""))
+
+        # print(f"Explanation: {explanation}")
         
         # 6. Update Sample
         sample.predicted_verdict = verdict
