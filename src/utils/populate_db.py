@@ -9,19 +9,25 @@ import ijson
 from pathlib import Path
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
+import sys
 import hydra
 from omegaconf import DictConfig
 
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
-def get_experiment_config():
+def get_experiment_config(cfg: DictConfig):
+    # If not interactive (e.g. Slurm batch job), use the config's dataset
+    if not sys.stdout.isatty():
+        dataset = cfg.data.get("dataset_name", "scifact").lower()
+        if dataset not in ['scifact', 'quantemp']:
+            dataset = 'scifact'
+        return {'dataset': dataset}
 
     questions = [
         inquirer.List('dataset',
                       message="Select the dataset to create vector DB for",
                       choices=['scifact', 'quantemp']), 
     ]
-
     return inquirer.prompt(questions)
 
 class VectorDBBuilder:
@@ -243,7 +249,7 @@ class VectorDBBuilder:
 
 @hydra.main(version_base=None, config_path="../../config", config_name="config")
 def main(cfg: DictConfig):
-    config = get_experiment_config()
+    config = get_experiment_config(cfg)
     
     if not config:
         print("Setup aborted...")

@@ -1,8 +1,0 @@
-{
-    "dataset": "scifact",
-    "uq_method": "Perplexity",
-    "optimal_threshold": 0.828856883042558,
-    "tolerance_delta": 0.05,
-    "calibrated_accuracy": 0.46865399385560674,
-    "aurc": 0.5227897710743697
-}

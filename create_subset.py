@@ -23,7 +23,11 @@ def get_config():
         inquirer.Text('portion',
                       message="Enter the target size of the subset (e.g., 0.1 for 10%)",
                       validate=validate_float,
-                      default="0.1")
+                      default="0.1"),
+
+        inquirer.Text('name', 
+                        message="Enter a name for this subset", 
+                        default="subset")
     ]
     return inquirer.prompt(questions)
 
@@ -102,6 +106,7 @@ def create_subset():
     dataset = config['dataset']
     split = config['split']
     portion = float(config['portion'])
+    name = config['name']
 
     print(f"\nReading {dataset} {split} data...")
 
@@ -115,7 +120,7 @@ def create_subset():
         subset = stratify_data(data, get_scifact_label, portion)
         print_distribution_stats(data, subset, get_scifact_label)
         
-        with open(f'data/{dataset}/claims_{split}_mini.jsonl', 'w', encoding='utf-8') as f:
+        with open(f'data/{dataset}/claims_{split}_{name}.jsonl', 'w', encoding='utf-8') as f:
             for item in subset:
                 f.write(json.dumps(item) + '\n')
                 
@@ -128,10 +133,10 @@ def create_subset():
         subset = stratify_data(data, get_quantemp_label, portion)
         print_distribution_stats(data, subset, get_quantemp_label)
         
-        with open(f'data/{dataset}/claims_{split}_mini.json', 'w', encoding='utf-8') as f:
+        with open(f'data/{dataset}/claims_{split}_{name}.json', 'w', encoding='utf-8') as f:
             json.dump(subset, f, indent=2)
     
-    print(f"✅ Stratified subset of {len(subset)} items created at data/{dataset}/claims_{split}_mini")
+    print(f"✅ Stratified subset of {len(subset)} items created at data/{dataset}/claims_{split}_{name}")
 
 if __name__ == "__main__":
     create_subset()

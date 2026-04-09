@@ -1,6 +1,6 @@
 import logging
 import json
-import os
+import re
 
 from lm_polygraph.model_adapters import WhiteboxModelvLLM
 from vllm import SamplingParams
@@ -23,8 +23,9 @@ class UncertaintyAwarePipeline(PipelineComponent):
             gen_params = SamplingParams(
                 temperature=0.0,
                 max_tokens=max_tokens,
-                logprobs=10, # CRITICAL: lm-polygraph needs logprobs to calculate UQ!
-                stop=["<|im_end|>"]
+                logprobs=5,
+                # Added <|im_start|> and <|start_header_id|> to instantly kill roleplaying
+                stop=["<|im_end|>", "<|eot_id|>", "```", "<|im_start|>", "<|start_header_id|>"]
             )
             
             # Pass the vLLM engine directly into WhiteboxModelvLLM
@@ -59,54 +60,32 @@ class UncertaintyAwarePipeline(PipelineComponent):
         }
 
     def process(self, sample: FactCheckSample) -> FactCheckSample:
-        # Format the prompt using chat template
-        messages = [{"role": "user", "content": self.parametric_prompt.format(claim=sample.claim)}]
-        full_prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        
-        # Get text and score concurrently from LM-Polygraph
-        response, score = self.uq_engine.estimate(full_prompt)
+        # ===== STEP 1: Whole-Claim UQ Pass =====
+        raw_response, score, parametric_verdict, parametric_explanation = self._run_uq_pass(sample)
 
-        if self.tokenizer:
-            prompt_tokens = len(self.tokenizer.encode(full_prompt))
-            response_tokens = len(self.tokenizer.encode(response)) if response else 0
-            
-            # Record the tokens consumed during the UQ pass
-            MetricsRecorder.record_token_usage(
-                sample,
-                input_tokens=prompt_tokens,
-                output_tokens=response_tokens
-            )
-        
-        # Store State
         sample.uncertainty_score = score
-        
-        # Clean up JSON backticks if LM-Polygraph missed them
-        clean_response = response.strip().replace("```json", "").replace("```", "").strip()
-        sample.parametric_response = clean_response
-        sample.parametric_verdict = self._parse_verdict(clean_response)
-        
-        # ALWAYS extract the parametric explanation, regardless of retrieval decision
-        try:
-            parsed_json = json.loads(clean_response)
-            parametric_explanation = parsed_json.get("explanation", "No explanation provided by model.")
-        except json.JSONDecodeError:
-            parametric_explanation = f"Failed to parse explanation. Raw output: {clean_response}"
+        sample.parametric_response = raw_response
+        sample.parametric_verdict = parametric_verdict
 
-        # print(f"Uncertainty score: {score:.4f}, threshold: {self.threshold}")
-
-        # --- STEP 2: Decision ---
-        is_uncertain = score >= self.threshold
-        should_retrieve = is_uncertain or self.calibration_mode
-
-        if not should_retrieve:
-            # [CASE A: CONFIDENT] 
-            sample.predicted_verdict = sample.parametric_verdict
+        # ===== Calibration Mode: UQ-only, skip everything else =====
+        if self.calibration_mode:
+            sample.predicted_verdict = parametric_verdict
             sample.explanation = parametric_explanation
-            sample.retrieval_triggered = False
+            sample.decomp_triggered = False
             return sample
 
-        # --- STEP 3: The "Typical One Pass RAG" (Only if Uncertain) ---
-        sample.retrieval_triggered = True
+        # ===== STEP 2: Decision =====
+        is_uncertain = score >= self.threshold
+
+        if not is_uncertain:
+            # [CONFIDENT] Return the parametric verdict directly
+            sample.predicted_verdict = parametric_verdict
+            sample.explanation = parametric_explanation
+            sample.decomp_triggered = False
+            return sample
+
+        # ===== STEP 3: RAG Pass (Only if Uncertain) =====
+        sample.decomp_triggered = True
         
         sample = self.retriever.process(sample)
         sample = self.aggregator.process(sample)
@@ -115,19 +94,63 @@ class UncertaintyAwarePipeline(PipelineComponent):
         sample = self.rag_verifier.process(sample) 
         
         sample.rag_prediction = sample.predicted_verdict 
-        
-        if self.calibration_mode:
-            # APPEND the calibration info
-            calibration_string = (
-                f"\n\n[CALIBRATION INFO] Score: {score:.4f} | "
-                f"Parametric Verdict: {sample.parametric_verdict} | RAG Verdict: {sample.rag_prediction}"
-            )
-            # Combine the LLM's explanation with the calibration debug string
-            sample.explanation = str(sample.explanation) + calibration_string
-            sample.predicted_verdict = sample.rag_prediction 
 
         return sample
-    
+
+    # -------------------------------------------------------------------------
+    # Internal Helpers
+    # -------------------------------------------------------------------------
+
+    def _run_uq_pass(self, sample: FactCheckSample):
+        """Runs the claim through UQ verifier and parses the response."""
+        clean_prompt = self.parametric_prompt.format(claim=sample.claim).replace("```json", "").strip()
+        messages = [{"role": "user", "content": clean_prompt}]
+        full_prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        # Append the hanging JSON tag so the model is forced to close it
+        full_prompt += "```json\n"
+
+        raw_response, score = self.uq_engine.estimate(full_prompt)
+
+        # lm-polygraph often returns the full sequence (prompt + generation)
+        # Strip the prompt out to avoid double-counting tokens and JSON parse errors
+        clean_response = raw_response
+        if full_prompt in raw_response:
+            clean_response = raw_response.replace(full_prompt, "", 1).strip()
+        elif raw_response.startswith(full_prompt.strip()):
+            clean_response = raw_response[len(full_prompt.strip()):].strip()
+
+        if self.tokenizer:
+            prompt_tokens = len(self.tokenizer.encode(full_prompt))
+            response_tokens = len(self.tokenizer.encode(clean_response)) if clean_response else 0
+            MetricsRecorder.record_token_usage(
+                sample,
+                input_tokens=prompt_tokens,
+                output_tokens=response_tokens,
+                step="uq"
+            )
+            MetricsRecorder.record_llm_call(sample)
+
+        # Parse the response
+        final_clean = clean_response.strip().replace("```json", "").replace("```", "").strip()
+
+        # NON-GREEDY JSON Extraction to prevent multi-block merging
+        json_target = final_clean
+        json_match = re.search(r'(\{.*?\})', final_clean, re.DOTALL)
+        if json_match:
+            json_target = json_match.group(1)
+
+        verdict = self._parse_verdict(json_target)
+
+        try:
+            parsed_json = json.loads(json_target)
+            explanation = parsed_json.get("explanation", "No explanation could be extracted from the model response.")
+            if "verdict" in parsed_json:
+                verdict = self._parse_verdict(parsed_json["verdict"])
+        except json.JSONDecodeError:
+            explanation = f"Failed to parse explanation. Raw output: {final_clean}"
+
+        return final_clean, score, verdict, explanation
+
     def _parse_verdict(self, text):
         strategy = self.verdict_parser.get(self.dataset)
         if strategy:

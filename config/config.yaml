@@ -1,28 +1,33 @@
 defaults:
-  - data: scifact
+  - data: quantemp
   - _self_
 
 experiment_name: "rq1"
-mode: "always_retrieve" # "always_retrieve" | "never_retrieve" | "uq_aware"
+mode: "always_retrieve" # "always_retrieve" | "never_retrieve" | "uq_aware" | "factscore" | "uq_decompose"
 
 retriever:
-  type: "vector_db"
+  type: "hybrid"                    # "vector" | "hybrid" | "gold"
   db_path: ${data.db_path}
   collection_name: ${data.collection_name}
   embedding_model: "BAAI/bge-m3"
   top_k: ${data.top_k}
-  debug: False
+  debug: True
+  # --- Hybrid Retriever settings (resolved per dataset) ---
+  sparse_index_path: ${data.hybrid_sparse_index_path}
+  hybrid_db_path: ${data.hybrid_db_path}
+  hybrid_collection_name: ${data.hybrid_collection_name}
+  top_k_retrieve: 30
+  top_k_final: 1
+  rrf_k: 60
+  alpha: 0.5
 
 llm:
   provider: "local_huggingface"
-  model_name: "meta-llama/Llama-3.2-3B-Instruct"
+  model_name: "Qwen/Qwen3-4B-Instruct-2507"
   device: "cuda"
-  max_new_tokens: 1024
+  max_model_len: 4096
+  max_new_tokens: 256
   do_sample: False
-  debug: False
-
-aggregator:
-  max_context_tokens: ${data.max_context_tokens}
 
 prompts:
   rag: ${data.rag_prompt}
@@ -33,3 +38,33 @@ uncertainty:
   method: "MeanTokenEntropy"
   threshold: 0.0
   calibration_mode: True
+
+decomposer:
+  prompt: |
+    You are a strict linguistic expert with the sole task of breaking down complex claims into simple, independent, and atomic facts.
+    
+    IMPORTANT RULES:
+    1. Each fact MUST be independently verifiable, but you MUST strictly carry over terms provided in the source claim without inventing your own.
+    2. Maintain all vital context (dates, locations, specific entities, temporal links) in EVERY atomic claim. Do not strip out "When", "Where", or "Who".
+    3. Resolve all pronouns and demonstratives (he, she, it, they, this, that) by replacing them with the specific nouns they refer to. 
+    4. NO EXTERNAL KNOWLEDGE: Do not define jargon, explain acronyms, or derive categories (e.g., do not explain that a specific cell is an "immune cell").
+    5. NO QUESTIONS: Treat acronyms (like "DNA") or complex jargon as proper nouns. NEVER ask for clarification or pose questions to the user.
+    6. If the claim is already a single, atomic fact, just output the claim itself exactly as written.
+    7. STRICT FORMATTING: DO NOT output any introductory text, conversational filler, or explanations. ONLY output the bulleted list.
+
+    Example 1:
+    Input: <claim>Repealing the sales tax on boats in Rhode Island has spawned 2,000 companies, 7,000 jobs and close to $2 billion a year in sales activity.</claim>
+    Output: 
+    - The sales tax on boats was repealed in Rhode Island.
+    - Repealing the sales tax on boats in Rhode Island has spawned 2,000 companies.
+    - Repealing the sales tax on boats in Rhode Island has spawned 7,000 jobs.
+    - Repealing the sales tax on boats in Rhode Island has spawned close to $2 billion a year in sales activity.
+
+    Example 2:
+    Input: <claim>40mg/day dosage of folic acid and 2mg/day dosage of vitamin B12 does not affect chronic kidney disease (CKD) progression.</claim>
+    Output: 
+    - 40mg/day dosage of folic acid does not affect chronic kidney disease (CKD) progression.
+    - 2mg/day dosage of vitamin B12 does not affect chronic kidney disease (CKD) progression.
+
+    Input: <claim>{claim}</claim>
+    Output:

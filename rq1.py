@@ -73,23 +73,19 @@ def get_experiment_config():
 
         inquirer.List('mode',
                       message="Select the experimental mode",
-                      choices=['never_retrieve', 'always_retrieve', 'uq_aware']),
+                      choices=['never_retrieve', 'always_retrieve', 'uq_aware', 'factscore', 'uq_decompose']),
         
         inquirer.List('uq_method',
                       message="Select the UQ Method for this run",
                       choices=available_estimators,
-                      ignore=lambda answers: answers.get('mode') != 'uq_aware'),
+                      ignore=lambda answers: answers.get('mode') not in ('uq_aware', 'uq_decompose')),
 
         inquirer.List('calibration', 
                       message="Apply calibration?",
                       choices=['Yes', 'No'],
-                      ignore=lambda answers: answers.get('mode') != 'uq_aware'),
+                      ignore=lambda answers: answers.get('mode') not in ('uq_aware', 'uq_decompose')),
 
-        inquirer.Text('tolerance',
-                      message="For calibration, enter the max acceptable accuracy drop from full RAG (delta, e.g., 0.05 for 5%)",
-                      validate=validate_float,
-                      default="0.05",
-                      ignore=lambda answers: answers.get('calibration') != 'Yes'),
+
 
         inquirer.List('calibration_split',
                       message="Select the data split for calibration",
@@ -99,7 +95,12 @@ def get_experiment_config():
         inquirer.List('calibrated_split',
                       message="Select the data split which was used for calibration",
                       choices=['train', 'val', 'test', 'train_mini', 'val_mini', 'test_mini'],
-                      ignore=lambda answers: answers.get('calibration') == 'Yes' or answers.get('mode') != 'uq_aware'),
+                      ignore=lambda answers: answers.get('calibration') == 'Yes' or answers.get('mode') not in ('uq_aware', 'uq_decompose')),
+
+        inquirer.List('calibration_method_used',
+                      message="Select the calibration method that was used",
+                      choices=['naive', 'threshold_sweep'],
+                      ignore=lambda answers: answers.get('calibration') == 'Yes' or answers.get('mode') not in ('uq_aware', 'uq_decompose')),
 
         inquirer.List('test_split',
                       message="Select the test data split",
@@ -125,17 +126,18 @@ def main(cfg: DictConfig):
     
     model_name = cfg.llm.model_name.split("/")[1]
     
-    if cfg.mode == 'uq_aware':
+    if cfg.mode in ('uq_aware', 'uq_decompose'):
         if not cfg.uncertainty.calibration_mode:
-            # Dynamically fetch the split the user said they calibrated on
+            # Dynamically fetch the split and calibration method the user said they calibrated on
             calib_split = cfg.data.calibrated_split
-            calibrated_thresh_path = Path(f"results/RQ1/{cfg.data.dataset_name}/{model_name}/calibration/{cfg.uncertainty.method}/optimal_threshold_{calib_split}.json")
+            calib_method = cfg.data.calibration_method_used
+            calibrated_thresh_path = Path(f"results/RQ1/{cfg.data.dataset_name}/{model_name}/calibration/{calib_method}/{cfg.uncertainty.method}/optimal_threshold_{calib_split}.json")
             
             if calibrated_thresh_path.exists():
                 with open(calibrated_thresh_path, 'r') as f:
                     thresh_data = json.load(f)
                     cfg.uncertainty.threshold = float(thresh_data.get("optimal_threshold", cfg.uncertainty.threshold))
-                print(f"🎯 Loaded calibrated threshold: {cfg.uncertainty.threshold} for {cfg.uncertainty.method} (from {calib_split} split)")
+                print(f"🎯 Loaded calibrated threshold: {cfg.uncertainty.threshold} for {cfg.uncertainty.method} (from {calib_split} split, method={calib_method})")
             else:
                 print(f"⚠️ Calibration file not found at {calibrated_thresh_path}.")
                 print(f"Falling back to manual configured threshold: {cfg.uncertainty.threshold}")
@@ -148,8 +150,7 @@ def main(cfg: DictConfig):
     # 3. Print Execution Summary
     print(f"\n🚀 Starting run on {cfg.data.dataset_name} ({cfg.data.split})")
     print(f"Mode: {cfg.mode} | UQ Method: {cfg.uncertainty.method}")
-    print(f"Using evidence token limit of {cfg.aggregator.max_context_tokens} tokens.")
-    if cfg.mode == 'uq_aware':
+    if cfg.mode in ('uq_aware', 'uq_decompose'):
         print(f"Threshold: {cfg.uncertainty.threshold} | Calibration Mode: {cfg.uncertainty.calibration_mode}")
 
     # 4. Initialize Loader & Data
@@ -168,8 +169,9 @@ def main(cfg: DictConfig):
     # 6. Define Output Path
     if cfg.uncertainty.calibration_mode:
         output_dir = Path("results/RQ1") / cfg.data.dataset_name / model_name / "calibration" / cfg.uncertainty.method
-    elif cfg.mode == "uq_aware":
-        output_dir = Path("results/RQ1") / cfg.data.dataset_name / model_name / "uq_aware" / cfg.uncertainty.method
+    elif cfg.mode in ("uq_aware", "uq_decompose"):
+        calib_method_used = cfg.data.calibration_method_used
+        output_dir = Path("results/RQ1") / cfg.data.dataset_name / model_name / cfg.mode / calib_method_used / cfg.uncertainty.method
     else:
         output_dir = Path("results/RQ1") / cfg.data.dataset_name / model_name / cfg.mode
         
@@ -222,13 +224,15 @@ if __name__ == "__main__":
     sys.argv.append(f"data.split={active_split}")
     sys.argv.append(f"mode={config['mode']}")
     
-    if config['mode'] == 'uq_aware':
+    if config['mode'] in ('uq_aware', 'uq_decompose'):
         sys.argv.append(f"uncertainty.method={config['uq_method']}")
         sys.argv.append(f"uncertainty.calibration_mode={config['calibration'] == 'Yes'}")
         
-        # Inject the historical calibration split so main() can find the file
+        # Inject the historical calibration split and method so main() can find the file
         if config.get('calibrated_split'):
             sys.argv.append(f"data.calibrated_split={config['calibrated_split']}")
+        if config.get('calibration_method_used'):
+            sys.argv.append(f"data.calibration_method_used={config['calibration_method_used']}")
 
     # Launch Hydra (do not pass custom arguments directly here)
     main()

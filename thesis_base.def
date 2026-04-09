@@ -1,0 +1,32 @@
+Bootstrap: docker
+From: nvidia/cuda:12.4.0-devel-ubuntu22.04
+
+%post
+    # System dependencies
+    apt-get update && apt-get install -y \
+        cmake \
+        pkg-config \
+        build-essential \
+        python3 \
+        python3-venv \
+        python3-pip \
+        git \
+        curl \
+        wget \
+        nano \
+        && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+    # Install uv (fast Python package manager)
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="/root/.local/bin:$PATH"
+
+    mkdir -p /opt/thesis
+    cd /opt/thesis
+
+    # Create empty Python 3.12 venv
+    uv venv /opt/thesis/.venv --python 3.12
+
+    # Activate venv by default when container starts
+    echo 'export PATH="/opt/thesis/.venv/bin:$PATH"' >> $APPTAINER_ENVIRONMENT
+    echo 'export VIRTUAL_ENV="/opt/thesis/.venv"' >> $APPTAINER_ENVIRONMENT
+    echo 'export PYTHONPATH="/workspace:$PYTHONPATH"' >> $APPTAINER_ENVIRONMENT

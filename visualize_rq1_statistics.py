@@ -13,68 +13,72 @@ import seaborn as sns
 from sklearn.metrics import balanced_accuracy_score
 import lm_polygraph.estimators as estimators
 
-def normalize_label(label, dataset_name):
-    """Cleans punctuation, underscores, and enforces strict academic evaluation."""
+def clean_label(label):
+    """Cleans punctuation, underscores, and enforces strict casing without semantic mapping."""
     lbl = str(label).upper().replace(".", "").replace("_", " ")
-    lbl = " ".join(lbl.split())
-    
-    if dataset_name.lower() == 'scifact':
-        mapping = {
-            "SUPPORTED": "SUPPORT", 
-            # (Thought) Partial support means the claim as a whole cannot be verified with given evidence/knowledge.
-            "PARTIAL SUPPORT": "NOT ENOUGH INFO", 
-            "REFUTED": "CONTRADICT", 
-            "NEI": "NOT ENOUGH INFO", 
-            "NOT": "NOT ENOUGH INFO"
-        }
-        return mapping.get(lbl, lbl)
-        
-    elif dataset_name.lower() == 'quantemp':
-        mapping = {
-            "SUPPORT": "TRUE", 
-            "SUPPORTED": "TRUE", 
-            # (Thought) A political/economic half-truth should be FALSE.
-            "PARTIAL SUPPORT": "FALSE", 
-            "PARTIALLY TRUE": "FALSE",
-            "CONTRADICT": "FALSE", 
-            "REFUTED": "FALSE", 
-        }
-        return mapping.get(lbl, lbl)
-        
-    return lbl
+    return " ".join(lbl.split())
 
 def load_calibration_data(filepath: str, dataset_name: str) -> pd.DataFrame:
     """
     Parses your specific JSONL format into a flat pandas DataFrame and sanitizes labels.
+    Strictly discards any claims that do not map to the allowed gold labels.
     """
     data = []
+    excluded_count = 0
+    
+    # Define strictly allowed labels based on the dataset
+    if dataset_name.lower() == "quantemp":
+        allowed_labels = {"TRUE", "FALSE", "CONFLICTING"}
+    else:
+        allowed_labels = {"SUPPORT", "CONTRADICT", "NOT ENOUGH INFO"}
+        
     with open(filepath, 'r') as f:
         for line in f:
-            row = json.loads(line)
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
             
             # Extract nested metrics
             metrics = row.get("metrics", {})
             input_tokens = metrics.get("input_tokens", 0)
             output_tokens = metrics.get("output_tokens", 0)
             
-            clean_gold = normalize_label(row.get("gold_label", ""), dataset_name)
-            clean_param = normalize_label(row.get("parametric_verdict", ""), dataset_name)
-            clean_rag = normalize_label(row.get("rag_prediction", ""), dataset_name)
+            # Use strict cleaning instead of semantic normalization
+            clean_gold = clean_label(row.get("gold_label", ""))
+            clean_param = clean_label(row.get("parametric_verdict", ""))
+            clean_rag = clean_label(row.get("rag_prediction", ""))
+            
+            # STRICT EXCLUSION FILTER
+            # Discard the claim if any of the labels failed to match an allowed value exactly
+            if clean_gold not in allowed_labels or clean_param not in allowed_labels or clean_rag not in allowed_labels:
+                excluded_count += 1
+                continue
             
             data.append({
-                "id": row["id"],
+                "id": row.get("id", ""),
                 "gold_label": clean_gold,
                 "parametric_verdict": clean_param,
                 "rag_prediction": clean_rag,
-                "uncertainty_score": row["uncertainty_score"],
+                # Default to inf if uncertainty failed, so it's always routed to RAG
+                "uncertainty_score": row.get("uncertainty_score", float('inf')),
                 # We assume bypassing RAG saves ~85% of input tokens (no evidence in prompt)
                 "parametric_tokens_estimated": (input_tokens * 0.15) + output_tokens,
                 "rag_tokens_total": input_tokens + output_tokens
             })
+            
+    print(f"\n--- Data Loading ---")
+    print(f"Total Valid Claims Loaded : {len(data)}")
+    print(f"Excluded Claims           : {excluded_count} (Invalid label output)")
+    print("-" * 20)
     
     return pd.DataFrame(data)
 
-def generate_all_plots(df: pd.DataFrame, save_path: string):
+def generate_all_plots(df: pd.DataFrame, save_path: str):
+    if df.empty:
+        print("Error: DataFrame is empty. Cannot generate plots.")
+        return
+        
     # Sort the dataframe by UQ score (lowest uncertainty first)
     df_sorted = df.sort_values(by="uncertainty_score", ascending=True).reset_index(drop=True)
     total_claims = len(df_sorted)
@@ -205,6 +209,10 @@ def get_experiment_config():
         inquirer.List('calibrated_split',
                       message="Select the data split which was used for calibration",
                       choices=['train', 'val', 'test', 'train_mini', 'val_mini', 'test_mini']),
+
+        inquirer.List('calibration_method_used',
+                      message="Select the calibration method that was used",
+                      choices=['naive', 'threshold_sweep']),
     ]
 
     return inquirer.prompt(questions)
@@ -220,11 +228,13 @@ def main(cfg: DictConfig):
     dataset = config['dataset']
     uq_method = config['uq_method']
     calibrated_split = config['calibrated_split']
-    model_name = cfg.llm.model_name.split("/")[1]
+    calibration_method = config.get('calibration_method_used', 'threshold_sweep')
+    # Upgraded split index to [-1] to ensure consistent loading regardless of huggingface path structure
+    model_name = cfg.llm.model_name.split("/")[-1]
 
     # Replace with your actual filepath
     path = f"results/RQ1/{dataset}/{model_name}/calibration/{uq_method}/results_{calibrated_split}.jsonl"
-    save_path = f"vis/RQ1/{dataset}/{model_name}/calibration/{uq_method}/{calibrated_split}"
+    save_path = f"vis/RQ1/{dataset}/{model_name}/calibration/{calibration_method}/{uq_method}/{calibrated_split}"
 
     os.makedirs(save_path, exist_ok=True)
 
