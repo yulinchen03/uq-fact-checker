@@ -19,7 +19,7 @@ def get_config():
 
         inquirer.List('mode',
                       message="Select the experimental mode",
-                      choices=['never_retrieve', 'always_retrieve', 'uq_aware', 'calibration']),
+                      choices=['never_retrieve', 'always_retrieve', 'uq_aware', 'uq_decompose', 'factscore', 'calibration']),
 
         inquirer.List('split',
                       message="Select the data split",
@@ -28,7 +28,7 @@ def get_config():
         inquirer.List('uq_method',
                       message="Select the UQ Method for this run",
                       choices=available_estimators,
-                      ignore=lambda answers: answers['mode'] != 'uq_aware' and answers['mode'] != 'calibration'),
+                      ignore=lambda answers: answers['mode'] not in ('uq_aware', 'uq_decompose', 'calibration')),
     ]
 
     return inquirer.prompt(questions)
@@ -43,7 +43,7 @@ def main(cfg: DictConfig):
     model_name = cfg.llm.model_name.split("/")[1]
 
     # Construct the path to the results file based on the selected configuration
-    if mode == 'uq_aware':
+    if mode in ('uq_aware', 'uq_decompose'):
         results_path = f"results/RQ1/{dataset}/{model_name}/{mode}/{uq_method}/results_{split}.jsonl"
     elif mode == 'calibration':
         results_path = f"results/RQ1/{dataset}/{model_name}/calibration/{uq_method}/results_val.jsonl"

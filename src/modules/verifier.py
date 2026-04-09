@@ -13,7 +13,7 @@ class LLMVerifier(PipelineComponent):
 
     def process(self, sample):
         # 1. Select Template
-        if sample.mode == "always_retrieve" or sample.mode == "uq_aware":
+        if sample.mode in ("always_retrieve", "uq_aware", "uq_decompose"):
             template = self.cfg.prompts.rag
             context = sample.aggregated_context if sample.aggregated_context else "No relevant evidence found."
             prompt = template.format(claim=sample.claim, context=context)
@@ -28,7 +28,6 @@ class LLMVerifier(PipelineComponent):
         # 2. Prepare Config (Map generic config to HF specific params)
         generation_config = {
             "max_new_tokens": self.cfg.llm.get("max_new_tokens", 1024), 
-            "do_sample": self.cfg.llm.get("do_sample", False)
         }
 
         # 3. Generate
@@ -41,29 +40,17 @@ class LLMVerifier(PipelineComponent):
         MetricsRecorder.record_token_usage(
             sample,
             input_tokens=usage.get("input_tokens", 0),
-            output_tokens=usage.get("output_tokens", 0)
+            output_tokens=usage.get("output_tokens", 0),
+            step="generation"
         )
+        MetricsRecorder.record_llm_call(sample)
 
         # 5. Parse Response
         verdict, explanation = self._parse_response(response.get("content", ""))
-
-        # print(f"Explanation: {explanation}")
         
         # 6. Update Sample
         sample.predicted_verdict = verdict
         sample.explanation = explanation
-
-        # --- DEBUG PRINT: Show the Prompt ---
-        if self.cfg.llm.debug:
-            print("\n" + "="*40)
-            print(f"[DEBUG] PROMPT for Claim {sample.id}:")
-            print("-" * 40)
-            print(prompt.strip())
-            print("="*40 + "\n")
-            print(f"[DEBUG] Response for Claim {sample.id}:")
-            print(sample.predicted_verdict + ". " + sample.explanation)
-            print("\n" + "="*40)
-        # ------------------------------------
 
         return sample
 

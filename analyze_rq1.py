@@ -5,7 +5,7 @@ import inquirer
 import numpy as np
 from pathlib import Path
 from omegaconf import DictConfig
-from sklearn.metrics import balanced_accuracy_score, confusion_matrix, classification_report, precision_recall_fscore_support, recall_score
+from sklearn.metrics import balanced_accuracy_score, confusion_matrix, classification_report, precision_recall_fscore_support, roc_auc_score
 import hydra
 import lm_polygraph.estimators as estimators
 
@@ -33,18 +33,28 @@ def get_experiment_config():
 
         inquirer.List('mode',
                       message="Select the experimental mode",
-                      choices=['never_retrieve', 'always_retrieve', 'uq_aware']),
+                      choices=['never_retrieve', 'always_retrieve', 'uq_aware', 'factscore', 'uq_decompose']),
         
         inquirer.List('uq_method',
                       message="Select the UQ Method for this run",
                       choices=available_estimators,
-                      ignore=lambda answers: answers.get('mode') != 'uq_aware'),
+                      ignore=lambda answers: answers.get('mode') not in ('uq_aware', 'uq_decompose')),
                       
         # Ask if we are analyzing the Calibration run or the Evaluation run
         inquirer.List('calibration',
                       message="Which run are you analyzing?",
                       choices=['Calibration (val)', 'Evaluation'],
-                      ignore=lambda answers: answers.get('mode') != 'uq_aware'),
+                      ignore=lambda answers: answers.get('mode') not in ('uq_aware', 'uq_decompose')),
+
+        inquirer.List('calibration_method_used',
+                      message="Select the calibration method that was used",
+                      choices=['naive', 'threshold_sweep'],
+                      ignore=lambda answers: answers.get('calibration') != 'Evaluation'),
+
+        inquirer.List('calibrated_split',
+                      message="Which split was originally used for calibration?",
+                      choices=['train', 'val', 'test', 'train_mini', 'val_mini', 'test_mini'],
+                      ignore=lambda answers: answers.get('calibration') != 'Evaluation'),
 
         inquirer.List('calibration_split',
                       message="Select the data split for calibration",
@@ -54,42 +64,16 @@ def get_experiment_config():
         inquirer.List('test_split',
                       message="Select the data split",
                       choices=['train', 'val', 'test', 'train_mini', 'val_mini','test_mini'],
-                      ignore=lambda answers: answers.get('mode') == 'uq_aware' or answers.get('calibration') == 'Calibration (val)'),
+                      ignore=lambda answers: answers.get('calibration') == 'Calibration (val)'),
     ]
 
     return inquirer.prompt(questions)
 
 
-def normalize_label(label, dataset_name):
-    """Cleans punctuation, underscores, and enforces strict academic evaluation."""
+def clean_label(label):
+    """Cleans punctuation, underscores, and enforces strict casing without semantic mapping."""
     lbl = str(label).upper().replace(".", "").replace("_", " ")
-    lbl = " ".join(lbl.split())
-    
-    if dataset_name.lower() == 'scifact':
-        mapping = {
-            "SUPPORTED": "SUPPORT", 
-            # (Thought) Partial support means the claim as a whole cannot be verified with given evidence/knowledge.
-            "PARTIAL SUPPORT": "NOT ENOUGH INFO", 
-            "PARTIALLY": "NOT ENOUGH INFO",
-            "REFUTED": "CONTRADICT", 
-            "NEI": "NOT ENOUGH INFO", 
-            "NOT": "NOT ENOUGH INFO"
-        }
-        return mapping.get(lbl, lbl)
-        
-    elif dataset_name.lower() == 'quantemp':
-        mapping = {
-            "SUPPORT": "TRUE", 
-            "SUPPORTED": "TRUE", 
-            # (Thought) A political/economic half-truth should be FALSE.
-            "PARTIAL SUPPORT": "FALSE", 
-            "PARTIALLY TRUE": "FALSE",
-            "CONTRADICT": "FALSE", 
-            "REFUTED": "FALSE", 
-        }
-        return mapping.get(lbl, lbl)
-        
-    return lbl
+    return " ".join(lbl.split())
 
 
 @hydra.main(version_base=None, config_path="config", config_name="config")
@@ -103,10 +87,10 @@ def analyze_results(cfg: DictConfig):
     # 2. Set strict Hydra config overrides
     cfg.data.dataset_name = config['dataset']
     cfg.mode = config['mode']
-    model_name = cfg.llm.model_name.split("/")[1]
+    model_name = cfg.llm.model_name.split("/")[-1]
 
     # Explicitly set the split and calibration mode
-    if cfg.mode == 'uq_aware':
+    if cfg.mode in ('uq_aware', 'uq_decompose'):
         cfg.uncertainty.method = config['uq_method']
         if config.get('calibration') == 'Calibration (val)':
             cfg.data.split = config['calibration_split']
@@ -119,13 +103,14 @@ def analyze_results(cfg: DictConfig):
         cfg.uncertainty.calibration_mode = False
 
     # 3. Define Paths
-    if cfg.mode == 'uq_aware':
+    if cfg.mode in ('uq_aware', 'uq_decompose'):
         if cfg.uncertainty.calibration_mode:
-            file_path = f"results/RQ1/{cfg.data.dataset_name}/{model_name}/calibration/{cfg.uncertainty.method}/results.jsonl"
-            save_path = f"results/RQ1/{cfg.data.dataset_name}/{model_name}/calibration/{cfg.uncertainty.method}/results_summary.json"
+            file_path = f"results/RQ1/{cfg.data.dataset_name}/{model_name}/calibration/{cfg.uncertainty.method}/results_{cfg.data.split}.jsonl"
+            save_path = f"results/RQ1/{cfg.data.dataset_name}/{model_name}/calibration/{cfg.uncertainty.method}/results_{cfg.data.split}_summary.json"
         else:
-            file_path = f"results/RQ1/{cfg.data.dataset_name}/{model_name}/uq_aware/{cfg.uncertainty.method}/results_{cfg.data.split}.jsonl"
-            save_path = f"results/RQ1/{cfg.data.dataset_name}/{model_name}/{cfg.mode}/{cfg.uncertainty.method}/results_{cfg.data.split}_summary.json"
+            calib_method_used = config.get('calibration_method_used', 'threshold_sweep')
+            file_path = f"results/RQ1/{cfg.data.dataset_name}/{model_name}/{cfg.mode}/{calib_method_used}/{cfg.uncertainty.method}/results_{cfg.data.split}.jsonl"
+            save_path = f"results/RQ1/{cfg.data.dataset_name}/{model_name}/{cfg.mode}/{calib_method_used}/{cfg.uncertainty.method}/results_{cfg.data.split}_summary.json"
     else:
         file_path = f"results/RQ1/{cfg.data.dataset_name}/{model_name}/{cfg.mode}/results_{cfg.data.split}.jsonl"
         save_path = f"results/RQ1/{cfg.data.dataset_name}/{model_name}/{cfg.mode}/results_{cfg.data.split}_summary.json"
@@ -136,97 +121,221 @@ def analyze_results(cfg: DictConfig):
         return
     
     print(f"Analyzing: {file_path}")
+
+    # 4. Define strict dataset labels for exclusion validation
+    if cfg.data.dataset_name == "quantemp":
+        allowed_labels = ["TRUE", "FALSE", "CONFLICTING"]
+    else:
+        allowed_labels = ["SUPPORT", "CONTRADICT", "NOT ENOUGH INFO"]
     
     y_true = []
     y_pred = []
     latencies = []
+    uncertainty_scores = []
+    
+    # Setup token tracking arrays
+    all_input_tokens = []
+    all_output_tokens = []
     total_tokens = []
-    retrievals_triggered = np.array([])
+    
+    uq_input_tokens = []
+    uq_output_tokens = []
+    gen_input_tokens = []
+    gen_output_tokens = []
+    decomp_input_tokens = []
+    decomp_output_tokens = []
+    num_retrieval_calls = []
+    num_llm_calls = []
+    num_atomic_facts = []
+    decomp_triggered_list = []
+    atom_rag_triggered = []
+    excluded_count = 0
 
-    # 4. Parse Results
+    # 5. Parse Results
     with open(file_path, 'r') as f:
         for line in f:
             try:
                 data = json.loads(line)
-                
-                metrics = data.get("metrics", {})
-                latencies.append(metrics.get("latency_seconds", 0.0))
-                total_tokens.append(metrics.get("input_tokens", 0) + metrics.get("output_tokens", 0))
-                
+
                 gold_raw = data.get("gold_label", "NOT ENOUGH INFO")
                 pred_raw = data.get("predicted_verdict", "NOT ENOUGH INFO")
 
-                gold = normalize_label(gold_raw, cfg.data.dataset_name)
-                pred = normalize_label(pred_raw, cfg.data.dataset_name)
+                gold = clean_label(gold_raw)
+                pred = clean_label(pred_raw)
+
+                # checks both gold AND pred, if the label does not match one of the available options, exclude from our results
+                if gold not in allowed_labels or pred not in allowed_labels:
+                    excluded_count += 1
+                    continue
 
                 y_true.append(gold)
                 y_pred.append(pred)
+                
+                # Capture UQ score if it exists
+                uq_score = data.get("uncertainty_score")
+                if uq_score is not None:
+                    uncertainty_scores.append(float(uq_score))
+                else:
+                    uncertainty_scores.append(None)
 
-                retrieval = data.get("retrieval_triggered", False)
-                retrievals_triggered = np.append(retrievals_triggered, retrieval)        
+                metrics = data.get("metrics", {})
+                latencies.append(metrics.get("latency_seconds", 0.0))
+                
+                # Capture standard input/output tokens
+                in_toks = metrics.get("input_tokens", 0)
+                out_toks = metrics.get("output_tokens", 0)
+                all_input_tokens.append(in_toks)
+                all_output_tokens.append(out_toks)
+                total_tokens.append(in_toks + out_toks)
+                
+                # Split tokens natively 
+                uq_input_tokens.append(metrics.get("uq_input_tokens", 0))
+                uq_output_tokens.append(metrics.get("uq_output_tokens", 0))
+                decomp_input_tokens.append(metrics.get("decomp_input_tokens", 0))
+                decomp_output_tokens.append(metrics.get("decomp_output_tokens", 0))
+                gen_input_tokens.append(metrics.get("gen_input_tokens", 0))
+                gen_output_tokens.append(metrics.get("gen_output_tokens", 0))
+                
+                num_retrieval_calls.append(metrics.get("num_retrieval_calls", 0))
+                num_llm_calls.append(metrics.get("num_llm_calls", 0))
+
+                # Track decomposition trigger (uq_decompose mode)
+                decomp_triggered_list.append(data.get("decomp_triggered", False))
+
+                # Track per-atom retrieval: count how many atoms triggered RAG
+                atom_verdicts = data.get("atomic_verdicts", [])
+                for av in atom_verdicts:
+                    atom_rag_triggered.append(av.get("rag_triggered", False))
+
+                # Count atomic facts: for factscore (always decomposes), count all;
+                # for uq_decompose, only count when decomposition was triggered
+                if "atomic_facts" in data and isinstance(data["atomic_facts"], list):
+                    is_decomposed = data.get("decomp_triggered", False)
+                    if cfg.mode == "factscore" or is_decomposed:
+                        num_atomic_facts.append(len(data["atomic_facts"]))
 
             except json.JSONDecodeError:
                 continue
 
     if not y_true:
-        print("No valid data found in the file.")
+        print("No valid data found in the file after applying strict exclusion rules.")
         return
 
     # --- CALCULATIONS ---
-    if cfg.mode == 'uq_aware':
-        retrieval_rate = retrievals_triggered.mean() if len(retrievals_triggered) > 0 else 0.0
-    elif cfg.mode == 'always_retrieve':
+    if cfg.mode in ('uq_aware', 'uq_decompose'):
+        decomp_rate = np.mean(decomp_triggered_list) if decomp_triggered_list else 0.0
+        retrieval_rate = np.mean(atom_rag_triggered) if atom_rag_triggered else 0.0
+    elif cfg.mode in ['always_retrieve', 'factscore']:
+        decomp_rate = 1.0 if cfg.mode == 'factscore' else 0.0
         retrieval_rate = 1.0
     else:
+        decomp_rate = 0.0
         retrieval_rate = 0.0
 
     avg_latency = float(np.mean(latencies)) if latencies else 0.0
+    
+    # Calculate Token Averages
+    avg_input_tokens = float(np.mean(all_input_tokens)) if all_input_tokens else 0.0
+    avg_output_tokens = float(np.mean(all_output_tokens)) if all_output_tokens else 0.0
     avg_tokens = float(np.mean(total_tokens)) if total_tokens else 0.0
-    total_claims = len(y_true)
     
-    # 1. Define strict dataset labels
-    if cfg.data.dataset_name == "quantemp":
-        labels = ["TRUE", "FALSE", "CONFLICTING"]
+    # Calculate separate averages
+    avg_uq_input_tokens = float(np.mean(uq_input_tokens)) if uq_input_tokens else 0.0
+    avg_uq_output_tokens = float(np.mean(uq_output_tokens)) if uq_output_tokens else 0.0
+    avg_gen_input_tokens = float(np.mean(gen_input_tokens)) if gen_input_tokens else 0.0
+    avg_gen_output_tokens = float(np.mean(gen_output_tokens)) if gen_output_tokens else 0.0
+    avg_decomp_input_tokens = float(np.mean(decomp_input_tokens)) if decomp_input_tokens else 0.0
+    avg_decomp_output_tokens = float(np.mean(decomp_output_tokens)) if decomp_output_tokens else 0.0
+    
+    avg_retrieval_calls = float(np.mean(num_retrieval_calls)) if num_retrieval_calls else 0.0
+    avg_llm_calls = float(np.mean(num_llm_calls)) if num_llm_calls else 0.0
+    
+    if cfg.mode in ('factscore', 'uq_decompose'):
+        avg_atomic_facts = float(np.mean(num_atomic_facts)) if num_atomic_facts else 0.0
     else:
-        labels = ["SUPPORT", "CONTRADICT", "NOT ENOUGH INFO"]
-
-    # 2. Native Sklearn Balanced Accuracy (Macro-Averaged Recall)
-    # This natively penalizes NEI predictions
-    bal_acc = recall_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
+        avg_atomic_facts = 1.0
     
-    # 3. Standard Sklearn Reporting
+    # For uq_decompose, also compute decomposition-conditional avg
+    decomp_conditional_avg_facts = avg_atomic_facts  # same if all decomposed
+    
+    total_claims = len(y_true)
+
+    bal_acc = balanced_accuracy_score(y_true, y_pred)
+    
     precision, recall, f1, support = precision_recall_fscore_support(
-        y_true, y_pred, labels=labels, zero_division=0
+        y_true, y_pred, labels=allowed_labels, zero_division=0
     )
-    conf_matrix = confusion_matrix(y_true, y_pred, labels=labels)
+    conf_matrix = confusion_matrix(y_true, y_pred, labels=allowed_labels)
+
+    # Calculate Error Detection AUROC
+    auroc = None
+    # Only calculate if we have UQ scores for our predictions
+    if any(s is not None for s in uncertainty_scores):
+        valid_pairs = [(t, p, u) for t, p, u in zip(y_true, y_pred, uncertainty_scores) if u is not None]
+        if valid_pairs:
+            y_t_valid = [x[0] for x in valid_pairs]
+            y_p_valid = [x[1] for x in valid_pairs]
+            u_valid = [x[2] for x in valid_pairs]
+            
+            # 1 = Incorrect (Error), 0 = Correct
+            # We expect higher uncertainty scores to correlate with incorrect predictions
+            errors = [1 if t != p else 0 for t, p in zip(y_t_valid, y_p_valid)]
+            
+            # AUROC is only defined if both classes (correct and incorrect) are present
+            if len(set(errors)) > 1:
+                auroc = roc_auc_score(errors, u_valid)
 
     stats_output = {
         "experiment_mode": cfg.mode,
         "dataset": cfg.data.dataset_name,
         "split": cfg.data.split,
         "total_claims": total_claims,
+        "excluded_claims": excluded_count,
         "metrics": {
-            "balanced_accuracy": bal_acc,
+            "balanced_accuracy": float(bal_acc),
+            "error_detection_auroc": float(f"{auroc:.4f}") if auroc is not None else None,
             "avg_latency_seconds": float(f"{avg_latency:.3f}"),
-            "avg_token_overhead": int(avg_tokens),
+            "avg_total_tokens": int(avg_tokens),
+            "avg_input_tokens": int(avg_input_tokens),
+            "avg_output_tokens": int(avg_output_tokens),
+            "avg_uq_input_tokens": int(avg_uq_input_tokens),
+            "avg_uq_output_tokens": int(avg_uq_output_tokens),
+            "avg_gen_input_tokens": int(avg_gen_input_tokens),
+            "avg_gen_output_tokens": int(avg_gen_output_tokens),
+            "avg_decomp_input_tokens": int(avg_decomp_input_tokens),
+            "avg_decomp_output_tokens": int(avg_decomp_output_tokens),
+            "avg_retrieval_calls": float(f"{avg_retrieval_calls:.2f}"),
+            "avg_llm_calls": float(f"{avg_llm_calls:.2f}"),
+            "avg_atomic_facts": float(f"{avg_atomic_facts:.2f}"),
+            "decomposition_trigger_rate": float(f"{decomp_rate*100:.2f}"),
             "retrieval_trigger_rate": float(f"{retrieval_rate*100:.2f}")
         }
     }
 
-    if cfg.mode == 'uq_aware':
+    if cfg.mode in ('uq_aware', 'uq_decompose'):
+        # Read the actual threshold used from the calibration JSON, not Hydra defaults
+        threshold_used = cfg.uncertainty.get('threshold', 0.0)
+        if not cfg.uncertainty.calibration_mode and config.get('calibration_method_used'):
+            calib_method_used = config['calibration_method_used']
+            calib_split = config.get('calibrated_split', config.get('calibration_split', 'val'))
+            thresh_path = f"results/RQ1/{cfg.data.dataset_name}/{model_name}/calibration/{calib_method_used}/{cfg.uncertainty.method}/optimal_threshold_{calib_split}.json"
+            if Path(thresh_path).exists():
+                with open(thresh_path, 'r') as tf:
+                    threshold_used = json.load(tf).get('optimal_threshold', threshold_used)
+        
         stats_output["uq_settings"] = {
             "method": config.get('uq_method'),
             "calibration": config.get('calibration'),
-            "threshold": cfg.uncertainty.threshold
+            "threshold": float(threshold_used)
         }
 
     stats_output["per_class_metrics"] = {}
     stats_output["confusion_matrix"] = {
-        "labels": labels,
+        "labels": allowed_labels,
         "matrix": conf_matrix.tolist() 
     }
 
-    for i, label in enumerate(labels):
+    for i, label in enumerate(allowed_labels):
         stats_output["per_class_metrics"][label] = {
             "precision": float(precision[i]),
             "recall": float(recall[i]),
@@ -243,13 +352,33 @@ def analyze_results(cfg: DictConfig):
     print("\n" + "="*40)
     print("       PERFORMANCE REPORT       ")
     print("="*40)
-    print(f"1. Avg Inference Latency : {avg_latency:.3f} s/claim")
-    print(f"2. Avg Token Overhead    : {avg_tokens:.0f} tokens/claim")
-    print(f"3. Balanced Accuracy     : {bal_acc:.4f} ({(bal_acc*100):.2f}%)")
-    print(f"4. Retrieval Ratio       : {retrieval_rate*100:.2f}%")
+    print(f"Total Evaluated Claims : {total_claims}")
+    print(f"Excluded Claims        : {excluded_count} (Invalid label output)")
     print("-" * 40)
+    print(f"1. Avg Inference Latency : {avg_latency:.3f} s/claim")
+    print(f"2. Avg Total Tokens      : {avg_tokens:.0f} tokens/claim")
+    print(f"   ├─ Avg Input Tokens     : {avg_input_tokens:.0f} tokens/claim")
+    print(f"   ├─ Avg Output Tokens    : {avg_output_tokens:.0f} tokens/claim")
+    print(f"   ├─ Avg UQ Input Tokens  : {avg_uq_input_tokens:.0f} tokens/claim")
+    print(f"   ├─ Avg UQ Output Tokens : {avg_uq_output_tokens:.0f} tokens/claim")
+    print(f"   ├─ Avg Gen Input Tokens : {avg_gen_input_tokens:.0f} tokens/claim")
+    print(f"   ├─ Avg Gen Output Tokens: {avg_gen_output_tokens:.0f} tokens/claim")
+    print(f"   ├─ Avg Decomp Input Tokens: {avg_decomp_input_tokens:.0f} tokens/claim")
+    print(f"   └─ Avg Decomp Output Tokens: {avg_decomp_output_tokens:.0f} tokens/claim")
+    print(f"3. Avg LLM Calls         : {avg_llm_calls:.2f} calls/claim")
+    print(f"4. Avg Retrieval Calls   : {avg_retrieval_calls:.2f} calls/claim")
+    print(f"5. Avg Atomic Facts      : {avg_atomic_facts:.2f} facts/claim (decomposed claims only)")
+    print(f"6. Decomp Trigger Rate   : {decomp_rate*100:.2f}%")
+    print(f"7. Retrieval Trigger Rate : {retrieval_rate*100:.2f}% (of all atomic claims)")
+    print("=" * 40)
+    print(f"★★★ BALANCED ACCURACY: {bal_acc:.4f} ({(bal_acc*100):.2f}%) ★★★")
+    if auroc is not None:
+        print(f"★★★ ERROR DETECT AUROC : {auroc:.4f} ★★★")
+    else:
+        print("★★★ ERROR DETECT AUROC : N/A (No UQ scores or unified class) ★★★")
+    print("=" * 40)
     print("\nDetailed Classification Report:")
-    print(classification_report(y_true, y_pred, target_names=labels, zero_division=0))
+    print(classification_report(y_true, y_pred, target_names=allowed_labels, zero_division=0))
     print(f"\nStats successfully saved to: {save_path}")
 
 if __name__ == "__main__":

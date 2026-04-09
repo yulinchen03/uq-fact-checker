@@ -1,87 +1,83 @@
+import os
+import pickle
 import chromadb
 import torch
-from typing import List
+import numpy as np
+import logging
+from typing import List, Tuple, Dict, Optional
+from collections import defaultdict
 from sentence_transformers import SentenceTransformer
 
 from src.data_models import Document
 from src.modules.abstract_components import PipelineComponent
+from src.utils.metrics import MetricsRecorder
+from src.modules.sparse_encoder import SpladeEncoder
+
+
+from transformers import AutoTokenizer, is_torch_npu_available, AutoModelForMaskedLM
+from vllm import LLM, SamplingParams
+from vllm.distributed.parallel_state import destroy_model_parallel
+import gc
+import math
+from vllm.inputs.data import TokensPrompt
+
+logger = logging.getLogger(__name__)
 
 class BaseRetriever(PipelineComponent):
     """Abstract base class for retrievers."""
-    
     def _retrieve(self, query: str) -> List[Document]:
-        """Retrieve documents for a given query."""
         raise NotImplementedError
 
+
 class VectorDBRetriever(BaseRetriever):
-    """Retriever using vector databases (ChromaDB)."""
-    
+    """Retriever using standard dense vector databases (ChromaDB)."""
     def __init__(self, collection: str, db_path: str, embedding_model: str, top_k: int = 3, device: str = "cuda", debug: bool = False):
-        """
-        Initialize connection to vector database and load embedding model.
-        
-        Args:
-            collection: Name of the ChromaDB collection.
-            db_path: Path to the vector database.
-            embedding_model: Name of the embedding model.
-            top_k: Number of documents to retrieve per query.
-            device: 'cuda' or 'cpu'.
-            debug: Whether to enable debug logging.
-        """
         self.collection_name = collection
         self.top_k = top_k
         self.device = device
         self.debug = debug
         
-        print(f"Loading Retriever: {embedding_model} on {device}...")
+        safe_repo_name = "models--" + embedding_model.replace("/", "--")
+        snapshot_dir = f"/hf_cache/hub/{safe_repo_name}/snapshots"
         
-        # 1. Load Embedding Model
-        # Trust remote code is needed for Qwen/newer models
-        self.encoder = SentenceTransformer(
-            embedding_model, 
-            device=device,
-            trust_remote_code=True
-        )
-        
-        # 2. Connect to ChromaDB
+        try:
+            hash_folder = os.listdir(snapshot_dir)[0]
+            local_model_path = os.path.join(snapshot_dir, hash_folder)
+        except Exception:
+            local_model_path = embedding_model
+
+        logger.info(f"Loading Retriever: {embedding_model} on {device}...")
+        self.encoder = SentenceTransformer(local_model_path, device=device, trust_remote_code=True, model_kwargs={"dtype": torch.bfloat16})
         self.client = chromadb.PersistentClient(path=db_path)
         
         try:
             self.collection = self.client.get_collection(self.collection_name)
         except Exception as e:
-            print(f"Error loading collection '{self.collection_name}': {e}")
+            logger.error(f"Error loading collection '{self.collection_name}': {e}")
             raise
 
     def _retrieve(self, query: str) -> List[Document]:
-        """Retrieve documents for the given query."""
+        self.encoder.max_seq_length = 512
         
-        # 1. Embed Query
         query_embedding = self.encoder.encode(
             [query], 
             convert_to_tensor=False,
             normalize_embeddings=True
         )[0].tolist()
 
-        # 2. Query Database
         results = self.collection.query(
             query_embeddings=[query_embedding],
             n_results=self.top_k
         )
 
-        # 3. Parse Results
         documents = []
-        
-        # Chroma returns lists of lists (batch format)
         ids = results.get("ids", [[]])[0]
         docs = results.get("documents", [[]])[0]
         metadatas = results.get("metadatas", [[]])[0]
         distances = results.get("distances", [[]])[0]
 
         for i in range(len(ids)):
-            # Handle potential None metadata
             meta = metadatas[i] if metadatas and i < len(metadatas) else {}
-            
-            # Construct Document object
             doc = Document(
                 source_id=ids[i],
                 content=docs[i],
@@ -93,19 +89,14 @@ class VectorDBRetriever(BaseRetriever):
         return documents
     
     def process(self, sample):
-        """
-        Process sample by retrieving evidence for all search queries.
-        """
         all_results = []
-        
-        # If no queries exist (e.g. IdentityGenerator wasn't run), use claim
         queries = sample.search_queries if sample.search_queries else [sample.claim]
         
         for query in queries:
             results = self._retrieve(query)
             all_results.extend(results)
+            MetricsRecorder.record_retrieval_call(sample)
         
-        # Deduplicate by source_id
         seen = set()
         unique_results = []
         for doc in all_results:
@@ -115,30 +106,482 @@ class VectorDBRetriever(BaseRetriever):
         
         sample.retrieved_evidence = unique_results
 
-        # --- DEBUG PRINT (scifact) ---
         if self.debug and self.collection_name == "scifact_corpus":            
             retrieved_ids = [str(doc.source_id) for doc in unique_results]
-            
-            # Now we can just use the list directly!
             gold_ids = [str(gid) for gid in sample.gold_evidence]
-            
             hits = set(retrieved_ids).intersection(set(gold_ids))
             
-            print(f"\n[DEBUG] Claim {sample.id}:")
-            print(f"   - Gold Refs: {gold_ids}")
-            print(f"   - Retrieved: {retrieved_ids}")
-            print(f"   - Overlap  : {len(hits)} / {len(gold_ids)}")
-            # -----------------------------
+            logger.info(f"\n[DEBUG] Claim {sample.id}:")
+            logger.info(f"   - Gold Refs: {gold_ids}")
+            logger.info(f"   - Retrieved: {retrieved_ids}")
+            logger.info(f"   - Overlap  : {len(hits)} / {len(gold_ids)}")
 
         return sample
 
 
 class SkipRetriever(BaseRetriever):
     """No-operation retriever (Never Retrieve mode)."""
-    
     def _retrieve(self, query: str) -> List[Document]:
         return []
     
     def process(self, sample):
-        """Do nothing and return the sample unchanged."""
+        return sample
+    
+
+class GoldRetriever(BaseRetriever):
+    """Retriever that exclusively returns the gold evidence for upper-bound testing."""
+    def __init__(self, dataset_name: str, db_path: str = None, collection: str = None):
+        self.dataset_name = dataset_name.lower()
+        self.collection_name = collection
+        
+        if self.dataset_name == "scifact" and db_path and collection:
+            logger.info(f"Loading Gold Retriever for SciFact using DB: {db_path}")
+            self.client = chromadb.PersistentClient(path=db_path)
+            self.collection = self.client.get_collection(self.collection_name)
+        else:
+            self.collection = None
+            logger.info(f"Loading Gold Retriever for {dataset_name} (Raw Text Mode)")
+
+    def _retrieve(self, query: str) -> List[Document]:
+        return []
+        
+    def process(self, sample):
+        documents = []
+        if not sample.gold_evidence:
+            sample.retrieved_evidence = []
+            return sample
+
+        MetricsRecorder.record_retrieval_call(sample)
+
+        if self.dataset_name == "scifact" and self.collection:
+            gold_ids = [str(gid) for gid in sample.gold_evidence]
+            results = self.collection.get(ids=gold_ids)
+            
+            docs = results.get("documents", [])
+            ids = results.get("ids", [])
+            metadatas = results.get("metadatas", [])
+            
+            for i in range(len(ids)):
+                meta = metadatas[i] if metadatas and i < len(metadatas) else {}
+                documents.append(Document(
+                    source_id=ids[i],
+                    content=docs[i],
+                    score=1.0, 
+                    **meta
+                ))
+        else:
+            for i, text in enumerate(sample.gold_evidence):
+                documents.append(Document(
+                    source_id=f"gold_{sample.id}_{i}",
+                    content=str(text),
+                    score=1.0 
+                ))
+                
+        sample.retrieved_evidence = documents
+        return sample
+
+
+# ---------------------------------------------------------------------------
+# Qwen3 Reranker Helper
+# ---------------------------------------------------------------------------
+# The Qwen3 reranker is a GENERATIVE model, not a standard cross-encoder.
+# It must NOT be loaded with AutoModelForSequenceClassification or via the
+# sentence-transformers CrossEncoder API — both will produce garbage scores.
+#
+# Correct scoring mechanism:
+#   1. Format each (claim, doc) pair using the chat template below.
+#   2. Run a forward pass and extract the logits of the LAST generated token.
+#   3. Score = log P("yes") - log P("no") at that token position.
+#
+# The instruction field is critical for fact-checking tasks. The default
+# instruction ("Given a web search query...") causes the contradiction trap:
+# the model penalises documents that REFUTE the claim. We override it with
+# an instruction that explicitly asks for evidential relevance regardless of
+# stance.
+# ---------------------------------------------------------------------------
+
+def _build_qwen3_reranker_prompt(instruction: str, query: str, doc: str) -> list:
+    """
+    Build the chat-template messages for a single (query, doc) pair.
+    Must be formatted this way — raw string input will not work.
+    """
+    return [
+        {
+            "role": "system",
+            "content": (
+                "Judge whether the Document meets the requirements based on the "
+                "Query and the Instruct provided. "
+                "Note that the answer can only be \"yes\" or \"no\"."
+            )
+        },
+        {
+            "role": "user",
+            "content": f"<Instruct>: {instruction}\n\n<Query>: {query}\n\n<Document>: {doc}"
+        }
+    ]
+
+
+class Qwen3Reranker:
+    """
+    Wrapper around Qwen3-Reranker-0.6B (or any Qwen3-Reranker variant).
+
+    Scores are derived from the yes/no token logits at the final generation
+    step — NOT from a classification head. Loading this model as a standard
+    CrossEncoder will produce random/inverted rankings.
+
+    Args:
+        model_name:  HuggingFace model id, e.g. "Qwen/Qwen3-Reranker-0.6B"
+        instruction: Task-specific instruction injected into every prompt.
+                     Overriding the default web-search instruction is essential
+                     for fact-checking, where contradicting evidence is relevant.
+        device:      "cuda" or "cpu"
+        max_length:  Token budget per (query, doc) pair (model max is 32 768).
+    """
+
+    INSTRUCTION = (
+        "Given a claim, retrieve passages that contain relevant evidence for "
+        "verifying the claim. A passage is relevant whether it supports OR "
+        "contradicts the claim — stance does not affect relevance."
+    )
+
+    def __init__(
+        self,
+        model_name: str = "Qwen/Qwen3-Reranker-0.6B",
+        instruction: Optional[str] = None,
+        device: str = "cuda",
+        max_length: int = 2048,
+    ):
+        self.device = device
+        self.max_length = max_length
+        self.instruction = instruction if instruction is not None else self.INSTRUCTION
+
+        logger.info(f"Loading Qwen3 reranker: {model_name} on {device}...")
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side="left")
+        self.model = LLM(model=model_name, 
+                            enable_prefix_caching=True, 
+                            gpu_memory_utilization=0.5,
+                            max_model_len=self.max_length,
+                            trust_remote_code=True,
+                            quantization="bitsandbytes",
+                            load_format="bitsandbytes",
+                            enforce_eager=True)
+
+        # Resolve the token ids for "yes" and "no" once at init time.
+        # The model scores = log P(yes_token) - log P(no_token) at the last position.
+        self.token_true_id  = self.tokenizer.convert_tokens_to_ids("yes")
+        self.token_false_id = self.tokenizer.convert_tokens_to_ids("no")
+
+        # Suffix that primes the model to emit a yes/no token next.
+        # The chat template ends with <|im_start|>assistant\n; we append
+        # the suffix AFTER applying the template so the model "sees" it
+        # as the beginning of its own turn.
+        self._suffix = "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+        self._suffix_ids = self.tokenizer.encode(self._suffix, add_special_tokens=False)
+
+        logger.info("✅ Qwen3 reranker loaded.")
+
+    def rerank(self, query: str, documents: List[Document]) -> List[Document]:
+        """
+        Rerank `documents` by evidential relevance to `query`.
+        Returns the list sorted by descending reranker score (score attribute updated in-place).
+        """
+        if not documents:
+            return documents
+        
+        batch_prompts = []
+        for doc in documents:
+            messages = _build_qwen3_reranker_prompt(self.instruction, query, doc.content)
+
+            # Apply the HuggingFace chat template (no generation prompt —
+            # we append the suffix manually to control the token budget).
+            input_ids = self.tokenizer.apply_chat_template(
+                messages,
+                tokenize=True,
+                add_generation_prompt=False,
+                enable_thinking=False,   # disable chain-of-thought for speed
+            )
+
+            # Append suffix, then truncate to max_length from the LEFT
+            # (preserve the end of the document rather than the beginning).
+            input_ids = (input_ids + self._suffix_ids)[-self.max_length:]
+            batch_prompts.append({"prompt_token_ids": input_ids})
+
+        # Ask for top 20 logprobs to ensure we capture the probabilities of 'yes' and 'no'
+        sampling_params = SamplingParams(max_tokens=1, temperature=0.0, logprobs=20)
+        
+        outputs = self.model.generate(batch_prompts, sampling_params=sampling_params, use_tqdm=False)
+
+        scores = []
+        for out in outputs:
+            # logprobs[0] is a dict of {token_id: Logprob_object} for the first generated token
+            first_token_logprobs = out.outputs[0].logprobs[0]
+            
+            true_obj = first_token_logprobs.get(self.token_true_id)
+            false_obj = first_token_logprobs.get(self.token_false_id)
+            
+            # vLLM returns Logprob objects which have a .logprob attribute. Fallback to -100 if not in top 20
+            tl = getattr(true_obj, "logprob", -100.0) if true_obj else -100.0
+            fl = getattr(false_obj, "logprob", -100.0) if false_obj else -100.0
+            
+            score = tl - fl
+            scores.append(score)
+
+        # Update document scores and sort descending
+        for doc, score in zip(documents, scores):
+            doc.score = score
+
+        return sorted(documents, key=lambda d: d.score, reverse=True)
+
+
+# ---------------------------------------------------------------------------
+# HybridRetriever  (dense + sparse  →  RRF  →  Qwen3 reranker)
+# ---------------------------------------------------------------------------
+
+class HybridRetriever(BaseRetriever):
+    """
+    Hybrid retriever supporting either:
+      1. Legacy BGE-M3 (Unified Extraction)
+      2. Decoupled Qwen3 (Dense) + SPLADE (Sparse)
+    """
+
+    def __init__(
+        self,
+        collection: str,
+        db_path: str,
+        sparse_index_path: str,
+        model_type: str = "qwen-splade", # "bgem3" or "qwen-splade"
+        top_k_retrieve: int = 100,
+        top_k_rerank: int = 60,
+        top_k_final: int = 3,
+        rrf_k: int = 60,
+        alpha: float = 0.5,
+        device: str = "cuda",
+        debug: bool = False,
+        use_reranker: bool = True,
+        reranker_model: str = "Qwen/Qwen3-Reranker-0.6B",
+        reranker_instruction: Optional[str] = None,
+        reranker_max_length: int = 4096,
+        # ── Decoupled Models Config ─────────────────────────────────────
+        dense_model: str = "Qwen/Qwen3-Embedding-0.6B",
+        dense_instruction: str = "Retrieve documents that provide explicit evidence to either support or completely refute this claim: ",
+        sparse_model: str = "naver/splade-cocondenser-ensembledistil"
+    ):
+        self.collection_name = collection
+        self.top_k_retrieve = top_k_retrieve
+        self.top_k_rerank = top_k_rerank
+        self.top_k_final = top_k_final
+        self.rrf_k = rrf_k
+        self.alpha = alpha
+        self.device = device
+        self.debug = debug
+        self.model_type = model_type
+        self.dense_instruction = dense_instruction
+        self.use_reranker = use_reranker
+
+        # ── 1. Load Encoding Engine ─────────────────────────────────────
+        if self.model_type == "bgem3":
+            from FlagEmbedding import BGEM3FlagModel
+            logger.info(f"Loading Unified Encoder (BGE-M3) on {device}...")
+            self.encoder = BGEM3FlagModel("BAAI/bge-m3", use_fp16=(device == "cuda"))
+        elif self.model_type == "qwen-splade":
+            logger.info(f"Loading Decoupled Dense Encoder ({dense_model}) on {device}...")
+            self.dense_encoder = SentenceTransformer(dense_model, device=device, trust_remote_code=True, model_kwargs={"dtype": torch.bfloat16})
+            logger.info(f"Loading Decoupled Sparse Encoder ({sparse_model}) on {device}...")
+            self.sparse_encoder = SpladeEncoder(sparse_model, device=device)
+        else:
+            raise ValueError(f"Unknown model_type: {self.model_type}")
+
+        # ── 2. Initialize Chroma & Pickled Indexes ──────────────────────
+        logger.info(f"Connecting to ChromaDB at {db_path}...")
+        self.client = chromadb.PersistentClient(path=db_path)
+        try:
+            self.collection = self.client.get_collection(self.collection_name)
+        except Exception as e:
+            logger.error(f"Error loading collection: {e}")
+            raise
+        
+        logger.info(f"Loading sparse index from {sparse_index_path}...")
+        with open(sparse_index_path, 'rb') as f:
+            self.inverted_index = pickle.load(f)
+        logger.info(f"✅ Sparse index loaded: {len(self.inverted_index)} unique tokens")
+
+        # ── 3. Initialize Reranker ──────────────────────────────────────
+        if self.use_reranker:
+            self.reranker = Qwen3Reranker(
+                model_name=reranker_model,
+                instruction=reranker_instruction,
+                device=device,
+                max_length=reranker_max_length,
+            )
+        else:
+            self.reranker = None
+            logger.info("ℹ️ Reranker disabled — running RRF-only mode.")
+
+        logger.info("✅ HybridRetriever initialized.")
+
+    # ── Internal retrieval helpers ──────────────────────────────────────
+
+    def _get_dense_results(self, query_dense_vec: list) -> List[Tuple[str, float]]:
+        results = self.collection.query(
+            query_embeddings=[query_dense_vec],
+            n_results=self.top_k_retrieve
+        )
+        ids = results.get("ids", [[]])[0]
+        distances = results.get("distances", [[]])[0]
+        return list(zip(ids, distances))
+    
+    def _get_sparse_results(self, query_lexical_weights: Dict[int, float]) -> List[Tuple[str, float]]:
+        doc_scores = defaultdict(float)
+        for token_id, query_weight in query_lexical_weights.items():
+            tok_str = str(token_id)
+            tok_int = int(token_id) if tok_str.isdigit() else None
+            
+            target_key = None
+            if tok_str in self.inverted_index:
+                target_key = tok_str
+            elif tok_int is not None and tok_int in self.inverted_index:
+                target_key = tok_int
+                
+            if target_key is not None:
+                for doc_id, doc_weight in self.inverted_index[target_key].items():
+                    doc_scores[str(doc_id)] += query_weight * doc_weight
+        
+        sorted_docs = sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)
+        return sorted_docs[:self.top_k_retrieve]
+    
+    def _rrf_fusion(
+        self,
+        dense_results: List[Tuple[str, float]],
+        sparse_results: List[Tuple[str, float]]
+    ) -> List[Tuple[str, float]]:
+        """Weighted Reciprocal Rank Fusion → sorted (doc_id, rrf_score) list."""
+        rrf_scores = defaultdict(float)
+        
+        for rank, (doc_id, _) in enumerate(dense_results, start=1):
+            rrf_scores[doc_id] += self.alpha * (1.0 / (self.rrf_k + rank))
+            
+        for rank, (doc_id, _) in enumerate(sparse_results, start=1):
+            rrf_scores[doc_id] += (1.0 - self.alpha) * (1.0 / (self.rrf_k + rank))
+        
+        return sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
+
+    # ── Main retrieval entry point ──────────────────────────────────────
+
+    def _retrieve(self, query: str, gold_ids: List[str] = None) -> List[Document]:
+        
+        # 1. Route Query Encoding based on Model Type
+        if self.model_type == "bgem3":
+            query_output = self.encoder.encode(
+                [query], return_dense=True, return_sparse=True, return_colbert_vecs=False, batch_size=1
+            )
+            q_vec = np.array(query_output["dense_vecs"][0])
+            query_dense = (q_vec / np.linalg.norm(q_vec)).tolist()
+            query_sparse = query_output["lexical_weights"][0]
+        else:
+            # Qwen3 Dense + SPLADE Sparse
+            full_query = f"{self.dense_instruction}{query}" if self.dense_instruction else query
+            
+            # Explicitly cap max_length for the dense query just to be safe
+            self.dense_encoder.max_seq_length = 512
+            query_dense = self.dense_encoder.encode([full_query], normalize_embeddings=True)[0].tolist()
+            
+            # SPLADE encodes the raw query without the dense instruction
+            query_sparse = self.sparse_encoder.encode([query], max_length=512)[0]
+        
+        # 2. Dual Retrieval
+        dense_results  = self._get_dense_results(query_dense)
+        sparse_results = self._get_sparse_results(query_sparse)
+        
+        # 3. Diagnostics
+        if self.debug:
+            logger.info("\n" + "="*50)
+            logger.info(f"🔍 DIAGNOSTIC: Dense: {len(dense_results)} | Sparse: {len(sparse_results)}")
+            if gold_ids:
+                dense_found  = [doc for doc, _ in dense_results  if doc in gold_ids]
+                sparse_found = [doc for doc, _ in sparse_results if doc in gold_ids]
+                logger.info(f"🟢 GOLD IN DENSE?  {'YES → '+str(dense_found)  if dense_found  else 'NO'}")
+                logger.info(f"🟢 GOLD IN SPARSE? {'YES → '+str(sparse_found) if sparse_found else 'NO'}")
+            else:
+                logger.info("⚪ NO GOLD EVIDENCE FOR THIS CLAIM")
+            logger.info("="*50)
+        
+        # 4. RRF Fusion
+        fused_results = self._rrf_fusion(dense_results, sparse_results)
+
+        # 5. Determine how many candidates to materialise from DB
+        if self.use_reranker and self.reranker is not None:
+            candidate_pool = fused_results[:self.top_k_rerank]
+        else:
+            candidate_pool = fused_results[:self.top_k_final]
+
+        if not candidate_pool:
+            return []
+        
+        # 6. Fetch texts for the candidate pool
+        candidate_ids = [doc_id for doc_id, _ in candidate_pool]
+        chroma_results = self.collection.get(
+            ids=candidate_ids,
+            include=["documents", "metadatas"]
+        )
+        
+        id_to_text = {
+            doc_id: chroma_results["documents"][i]
+            for i, doc_id in enumerate(chroma_results["ids"])
+        }
+        id_to_meta = {
+            doc_id: (chroma_results["metadatas"][i] or {})
+            for i, doc_id in enumerate(chroma_results["ids"])
+        }
+        
+        # 7. Build Document objects (score = RRF score at this point)
+        candidate_docs = []
+        for doc_id, rrf_score in candidate_pool:
+            if doc_id in id_to_text:
+                candidate_docs.append(Document(
+                    source_id=doc_id,
+                    content=id_to_text[doc_id],
+                    score=float(rrf_score),
+                    **id_to_meta.get(doc_id, {})
+                ))
+
+        # 8. Optional reranking
+        if self.use_reranker and self.reranker is not None:
+            if self.debug:
+                pre_ids = [d.source_id for d in candidate_docs]
+                logger.info(f"🔄 Reranking {len(candidate_docs)} candidates → top {self.top_k_final}")
+                if gold_ids:
+                    gold_in_pool = [d for d in candidate_docs if d.source_id in gold_ids]
+                    logger.info(f"🟢 GOLD IN RERANKER POOL? "
+                                f"{'YES → '+str([d.source_id for d in gold_in_pool]) if gold_in_pool else 'NO'}")
+
+            reranked = self.reranker.rerank(query, candidate_docs)
+
+            if self.debug and gold_ids:
+                for rank, doc in enumerate(reranked, start=1):
+                    if doc.source_id in gold_ids:
+                        logger.info(f"🏆 GOLD doc rank after reranking: {rank}/{len(reranked)} "
+                                    f"(score={doc.score:.4f})")
+
+            candidate_docs = reranked[:self.top_k_final]
+        
+        return candidate_docs
+
+    def process(self, sample):
+        all_results = []
+        queries = sample.search_queries if sample.search_queries else [sample.claim]
+        gold_ids = [str(gid) for gid in sample.gold_evidence] if sample.gold_evidence else []
+        
+        for query in queries:
+            results = self._retrieve(query, gold_ids=gold_ids)
+            all_results.extend(results)
+            MetricsRecorder.record_retrieval_call(sample)
+        
+        seen = set()
+        unique_results = []
+        for doc in all_results:
+            if doc.source_id not in seen:
+                seen.add(doc.source_id)
+                unique_results.append(doc)
+        
+        sample.retrieved_evidence = unique_results
         return sample

@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
 import logging
+import numpy as np
 import lm_polygraph.estimators as estimators
 from lm_polygraph.stat_calculators.greedy_probs import GreedyProbsCalculator
 from lm_polygraph.stat_calculators.entropy import EntropyCalculator
-import numpy as np
+from lm_polygraph.stat_calculators.stat_calculator import StatCalculator
+from vllm import SamplingParams
 
 
 def get_safe_logger():
@@ -15,11 +17,90 @@ def get_safe_logger():
 
 logger = get_safe_logger()
 
-# Estimators that require greedy_log_probs directly
-LOGPROB_METRICS = ["Perplexity", "MaximumSequenceProbability"]
+# Estimators that require greedy_log_likelihoods directly
+LOGPROB_METRICS = [
+    "Perplexity", 
+    "MaximumSequenceProbability",
+    "MeanPointwiseMutualInformation",
+    "MeanConditionalPointwiseMutualInformation"
+]
 
 # Estimators that require a pre-computed entropy stat
-ENTROPY_METRICS = ["MeanTokenEntropy"]
+ENTROPY_METRICS = [
+    "MeanTokenEntropy", 
+    "MeanConditionalPointwiseMutualInformation" # CPMI explicitly requires stats["entropy"]
+]
+
+# Estimators that require unconditioned LM probabilities (P(x))
+PMI_METRICS = [
+    "MeanPointwiseMutualInformation",
+    "MeanConditionalPointwiseMutualInformation"
+]
+
+
+class VLLMGreedyLMProbsCalculator(StatCalculator):
+    """
+    Custom Calculator for LM-Polygraph that calculates unconditioned sequence 
+    probabilities (P(x)) using the vLLM engine, bypassing the HuggingFace dependency.
+    """
+    
+    @staticmethod
+    def meta_info():
+        # Returns: (stats provided, stats depended upon)
+        return (["greedy_lm_log_likelihoods"], ["greedy_tokens"])
+
+    def __init__(self):
+        super().__init__()
+
+    def __call__(self, dependencies, texts, model, max_new_tokens=100, **kwargs):
+        # model is WhiteboxModelvLLM, model.model is the vLLM engine
+        llm = model.model
+        greedy_tokens = dependencies.get("greedy_tokens", [])
+        
+        # Edge case: Empty generation
+        if not greedy_tokens or not greedy_tokens[0]:
+            return {"greedy_lm_log_likelihoods": [[0.0]]}
+        
+        # Configure vLLM to score the generated sequence as if it were a prompt
+        sampling_params = SamplingParams(
+            prompt_logprobs=1, 
+            max_tokens=1, 
+            temperature=0.0
+        )
+        
+        # vLLM 0.6.0+ removes the 'prompt_token_ids' kwarg. 
+        # Tokens must now be passed as a list of dictionaries to the first positional argument.
+        vllm_inputs = [{"prompt_token_ids": tokens} for tokens in greedy_tokens]
+        
+        # Pass the generated token IDs directly to vLLM
+        outputs = llm.generate(
+            vllm_inputs, 
+            sampling_params=sampling_params, 
+            use_tqdm=False
+        )
+        
+        lm_log_likelihoods = []
+        for i, out in enumerate(outputs):
+            seq_logprobs = []
+            p_logprobs = out.prompt_logprobs
+            
+            for j, token_id in enumerate(greedy_tokens[i]):
+                if j == 0 or p_logprobs[j] is None:
+                    # First token has no prior context, logprob is effectively 0.0
+                    seq_logprobs.append(0.0)
+                else:
+                    # Extract the logprob for the specific token at position j
+                    if token_id in p_logprobs[j]:
+                        val = p_logprobs[j][token_id]
+                        # Account for different vLLM versions (Logprob object vs raw float)
+                        logp = val.logprob if hasattr(val, "logprob") else val
+                        seq_logprobs.append(logp)
+                    else:
+                        seq_logprobs.append(-100.0) # Safe fallback
+                        
+            lm_log_likelihoods.append(seq_logprobs)
+            
+        return {"greedy_lm_log_likelihoods": lm_log_likelihoods}
 
 
 class UQEstimator(ABC):
@@ -37,17 +118,24 @@ class UQVerifier(UQEstimator):
 
         Args:
             model: WhiteboxModelvLLM instance.
-            estimator_name: Name of the lm-polygraph estimator class to use,
-                            e.g. "MeanTokenEntropy", "Perplexity".
+            estimator_name: Name of the lm-polygraph estimator class to use.
         """
         self.model = model
         self.estimator_name = estimator_name
 
+        # 1. Base Calculator (Always needed)
         self.greedy_calculator = GreedyProbsCalculator(
             output_attentions=False,
             output_hidden_states=False,
         )
-        self.entropy_calculator = EntropyCalculator()
+        
+        # 2. Conditional Calculators
+        if self.estimator_name in ENTROPY_METRICS:
+            self.entropy_calculator = EntropyCalculator()
+            
+        if self.estimator_name in PMI_METRICS:
+            # Use our custom vLLM calculator instead of the broken default one!
+            self.pmi_calculator = VLLMGreedyLMProbsCalculator()
 
         try:
             estimator_class = getattr(estimators, self.estimator_name)
@@ -78,14 +166,27 @@ class UQVerifier(UQEstimator):
             model_outputs.update(greedy_prob_results)
 
             # Step 2: Safety check — ensure log probs were populated for logprob-based metrics
-            if self.estimator_name in LOGPROB_METRICS and "greedy_log_probs" not in model_outputs:
-                logger.warning(f"greedy_log_probs missing for estimator '{self.estimator_name}'.")
-                return self._fallback_error("Missing greedy_log_probs")
+            if self.estimator_name in LOGPROB_METRICS:
+                if "greedy_log_likelihoods" not in model_outputs:
+                    if hasattr(self.model, "supports_logprobs") and self.model.supports_logprobs:
+                        for alt_key in ["logprobs", "last_logprobs", "greedy_log_probs", "greedy_logprobs", "greedy_log_likelihoods"]:
+                            if alt_key in model_outputs:
+                                model_outputs["greedy_log_likelihoods"] = model_outputs[alt_key]
+                                model_outputs["greedy_log_probs"] = model_outputs[alt_key] 
+                                break
+                
+                if "greedy_log_likelihoods" not in model_outputs:
+                    logger.warning(f"greedy_log_likelihoods missing for estimator '{self.estimator_name}'.")
+                    return self._fallback_error("Missing greedy_log_likelihoods")
 
-            # Step 3: Compute entropy stats if required by the estimator
+            # Step 3: Compute explicitly defined supplemental stats
             if self.estimator_name in ENTROPY_METRICS:
                 entropy_results = self.entropy_calculator(model_outputs, texts=texts, model=self.model)
                 model_outputs.update(entropy_results)
+                
+            if self.estimator_name in PMI_METRICS:
+                pmi_results = self.pmi_calculator(model_outputs, texts=texts, model=self.model)
+                model_outputs.update(pmi_results)
 
             # Step 4: Run the UQ estimator
             scores = self.estimator(model_outputs)

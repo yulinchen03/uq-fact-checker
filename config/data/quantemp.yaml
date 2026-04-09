@@ -2,9 +2,13 @@ dataset_name: "quantemp"
 root_path: "./data"
 split: "test"
 calibrated_split: "val"
+calibration_method_used: "threshold_sweep"
 db_path: "data/vector_db/quantemp"
-collection_name: "quantemp_corpus"
-max_context_tokens: 250 # 95th percentile length of all corpus docs (158) * top_k + buffer
+collection_name: "quantemp_docs"
+hybrid_db_path: "data/vector_db/quantemp_hybrid"
+hybrid_collection_name: "quantemp_hybrid_dense"
+hybrid_sparse_index_path: "data/vector_db/quantemp_hybrid/sparse_index.pkl"
+max_context_tokens: 250
 top_k: 1
 
 rag_prompt: |
@@ -18,7 +22,7 @@ rag_prompt: |
   4. Explanation: Limit to MAX 2 sentences. Focus only on the specific data points from the evidence that justify the verdict.
   5. Format: Return a valid JSON object. Provide "explanation" then "verdict".
   6. Constraint: Do not repeat the claim text. Do not use filler phrases.
-  7. No <think> tags or internal reasoning.
+  7. No think tags or internal reasoning.
 
   REQUIRED FORMAT:
   {{
@@ -43,7 +47,7 @@ parametric_prompt: |
   4. Explanation: Limit to MAX 2 sentences. State only the relevant fact that led to your verdict.
   5. Format: Return a valid JSON object. Provide "explanation" then "verdict".
   6. Constraint: Do not repeat the claim. Do not provide background history.
-  7. No <think> tags or internal reasoning.
+  7. No think tags or internal reasoning.
 
   REQUIRED FORMAT:
   {{
@@ -52,5 +56,29 @@ parametric_prompt: |
   }}
 
   Claim: "{claim}"
+  Response:
+  ```json
+
+atomic_baseline_prompt: |
+  Evaluate the political/economic claim against the provided text. Output a single-line JSON object with the verdict ONLY.
+
+  Labels:
+  * True: Text explicitly confirms the claim with matching numbers/data.
+  * False: Text explicitly refutes the claim with contradictory data.
+  * Conflicting: Text contains multiple data points or expert opinions that contradict each other regarding the claim.
+
+  CRITICAL RULES:
+  1. Statistical and numerical claims must match the text exactly to be "True".
+  2. Account for standard economic/political abbreviations (e.g., "GDP", "IMF").
+  3. DO NOT GUESS
+
+  REQUIRED FORMAT:
+  {{
+    "verdict": "<True, False, or Conflicting>",
+  }}
+
+  Context: "{context}"
+  Claim: "{claim}"
+
   Response:
   ```json

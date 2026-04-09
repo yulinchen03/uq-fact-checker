@@ -87,12 +87,17 @@ class LocalDataLoader:
             # 2. Raw Label (No Normalization)
             # We treat the raw label (True/False) as the gold standard
             raw_label = str(data.get("label", "False"))
+
+            # --- Extract the gold evidence text from the 'doc' field ---
+            doc_text = data.get("doc", "").strip()
+            # Wrap in a list so it matches the expected gold_evidence type
+            gold_ev = [doc_text] if doc_text else []
             
             sample = FactCheckSample(
                 id=sample_id,
                 claim=data.get("claim"),
-                gold_label=raw_label,   # Keeps "True", "False", "Conflicting"
-                gold_evidence=[],       # Empty (Retrieval accuracy ignored)
+                gold_label=raw_label,   # "True", "False", "Conflicting"
+                gold_evidence=gold_ev,
                 mode="always_retrieve",
                 metrics=FactCheckMetrics(latency_seconds=0.0, input_tokens=0, output_tokens=0)
             )

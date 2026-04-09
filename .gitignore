@@ -151,11 +151,15 @@ secrets.json
 data/chroma_db
 .claude
 src/ckpts
-
-SeSE/
+demos
+src/SeSE
 QuanTemp
 data/vector_db
 outputs
 
 data/quantemp/corpus.json 
-# too large
+*.sif
+tests
+results/archives
+results/runs
+results_dump
