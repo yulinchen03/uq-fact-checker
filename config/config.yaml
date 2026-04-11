@@ -1,23 +1,23 @@
 defaults:
-  - data: quantemp
+  - data: scifact
   - _self_
 
-experiment_name: "rq1"
+experiment_name: "thesis"
 mode: "always_retrieve" # "always_retrieve" | "never_retrieve" | "uq_aware" | "factscore" | "uq_decompose"
 
 retriever:
   type: "hybrid"                    # "vector" | "hybrid" | "gold"
-  db_path: ${data.db_path}
-  collection_name: ${data.collection_name}
-  embedding_model: "BAAI/bge-m3"
+  embedding_model: "Qwen/Qwen3-Embedding-0.6B"
+  sparse_model: "naver/splade-cocondenser-ensembledistil"
+  reranker_model: "Qwen/Qwen3-Reranker-0.6B"
   top_k: ${data.top_k}
   debug: True
   # --- Hybrid Retriever settings (resolved per dataset) ---
-  sparse_index_path: ${data.hybrid_sparse_index_path}
-  hybrid_db_path: ${data.hybrid_db_path}
-  hybrid_collection_name: ${data.hybrid_collection_name}
-  top_k_retrieve: 30
-  top_k_final: 1
+  model_type: "qwen-splade"
+  use_reranker: False
+  top_k_retrieve: 100
+  top_k_rerank: 50
+  top_k_final: ${data.top_k}
   rrf_k: 60
   alpha: 0.5
 

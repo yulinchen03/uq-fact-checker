@@ -3,7 +3,8 @@ from pydantic import BaseModel, Field
 
 class Document(BaseModel):
     content: str
-    source_id: str
+    source_id: str # Parent document ID
+    chunk_id: str # Unique ID for the chunk
     score: float = 0.0
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
@@ -39,7 +40,7 @@ class FactCheckSample(BaseModel):
     uncertainty_score: Optional[float] = None
     parametric_response: Optional[str] = None
     parametric_verdict: Optional[str] = None
-    decomp_triggered: bool = False
+    uq_flagged: bool = False
     rag_prediction: Optional[str] = None
 
     # --- FACTSCORE SPECIFIC FIELDS ---

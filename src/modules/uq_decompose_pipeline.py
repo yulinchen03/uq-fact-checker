@@ -91,7 +91,7 @@ class UQDecomposePipeline(PipelineComponent):
         if self.calibration_mode:
             sample.predicted_verdict = parametric_verdict
             sample.explanation = parametric_explanation
-            sample.decomp_triggered = False
+            sample.uq_flagged = False
             return sample
 
         # ===== STEP 2: Decision =====
@@ -101,11 +101,11 @@ class UQDecomposePipeline(PipelineComponent):
             # [CONFIDENT] Return the parametric verdict directly
             sample.predicted_verdict = parametric_verdict
             sample.explanation = parametric_explanation
-            sample.decomp_triggered = False
+            sample.uq_flagged = False
             return sample
 
         # ===== STEP 3: Decompose into Atomic Claims =====
-        sample.decomp_triggered = True
+        sample.uq_flagged = True
         sample = self.decomposer.process(sample)
 
         # ===== STEP 4: Per-Atom UQ Verification =====
@@ -274,52 +274,33 @@ class UQDecomposePipeline(PipelineComponent):
             evidence_chunks = self.retriever._retrieve(atom)
             MetricsRecorder.record_retrieval_call(sample)
 
-        # Build context blocks
-        evidence_blocks = []
-        for chunk in evidence_chunks:
-            title = "Article"
-            if hasattr(chunk, 'title') and chunk.title:
-                title = chunk.title
-            text = chunk.content if hasattr(chunk, 'content') else str(chunk)
-            evidence_blocks.append(f"Title: {title}\nText: {text}\n")
-
-        context = "\n".join(evidence_blocks)
-
-        # Truncate context if too long
-        if hasattr(self, 'tokenizer') and self.tokenizer:
-            tokens = self.tokenizer.encode(context, add_special_tokens=False)
-            max_ctx = self.cfg.llm.get("max_model_len", 4096) - self.cfg.llm.get("max_new_tokens", 256) - 512
-            max_ctx = max(max_ctx, 500)
-            if len(tokens) > max_ctx:
-                truncated_text = self.tokenizer.decode(tokens[:max_ctx], skip_special_tokens=True)
-                last_p = max(truncated_text.rfind('.'), truncated_text.rfind('?'), truncated_text.rfind('!'))
-                if last_p != -1:
-                    context = truncated_text[:last_p + 1]
-                else:
-                    last_space = truncated_text.rfind(' ')
-                    context = truncated_text[:last_space] if last_space != -1 else truncated_text
-
-        # Build a temporary mini-sample for the RAG verifier
-        mini_sample = FactCheckSample(
+        # 1. Build a temporary sample to feed into the aggregator
+        temp_sample = FactCheckSample(
             id=sample.id,
             claim=atom,
             mode="uq_decompose"
         )
-        mini_sample.aggregated_context = context.strip()
+        temp_sample.retrieved_evidence = evidence_chunks
 
-        # Run the RAG verifier on the mini-sample
-        mini_sample = self.rag_verifier.process(mini_sample)
+        # 2. Let the EvidenceAggregator handle the smart merging & formatting!
+        temp_sample = self.aggregator.process(temp_sample)
+        
+        # Track the raw blocks for logging/evaluation purposes
+        evidence_blocks = [chunk.content for chunk in evidence_chunks]
 
-        # Record metrics on the REAL sample
+        # 3. Run the RAG verifier on the perfectly formatted sample
+        temp_sample = self.rag_verifier.process(temp_sample)
+
+        # 4. Record metrics on the REAL sample
         MetricsRecorder.record_token_usage(
             sample,
-            input_tokens=mini_sample.metrics.gen_input_tokens,
-            output_tokens=mini_sample.metrics.gen_output_tokens,
+            input_tokens=temp_sample.metrics.gen_input_tokens,
+            output_tokens=temp_sample.metrics.gen_output_tokens,
             step="generation"
         )
         MetricsRecorder.record_llm_call(sample)
 
-        return mini_sample.predicted_verdict, mini_sample.explanation, evidence_blocks
+        return temp_sample.predicted_verdict, temp_sample.explanation, evidence_blocks
 
     # -------------------------------------------------------------------------
     # Verdict Parsing & Aggregation (shared with existing modules)

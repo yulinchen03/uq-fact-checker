@@ -71,7 +71,7 @@ class UncertaintyAwarePipeline(PipelineComponent):
         if self.calibration_mode:
             sample.predicted_verdict = parametric_verdict
             sample.explanation = parametric_explanation
-            sample.decomp_triggered = False
+            sample.uq_flagged = False
             return sample
 
         # ===== STEP 2: Decision =====
@@ -81,11 +81,11 @@ class UncertaintyAwarePipeline(PipelineComponent):
             # [CONFIDENT] Return the parametric verdict directly
             sample.predicted_verdict = parametric_verdict
             sample.explanation = parametric_explanation
-            sample.decomp_triggered = False
+            sample.uq_flagged = False
             return sample
 
         # ===== STEP 3: RAG Pass (Only if Uncertain) =====
-        sample.decomp_triggered = True
+        sample.uq_flagged = True
         
         sample = self.retriever.process(sample)
         sample = self.aggregator.process(sample)

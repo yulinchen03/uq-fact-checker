@@ -45,6 +45,10 @@ class LLMVerifier(PipelineComponent):
         )
         MetricsRecorder.record_llm_call(sample)
 
+        print("*"*100)
+        print(response.get("content", ""))
+        print("*"*100)
+
         # 5. Parse Response
         verdict, explanation = self._parse_response(response.get("content", ""))
         

@@ -23,7 +23,7 @@ class LocalLLMClient:
             # Initialize the shared vLLM engine.
             self.llm = LLM(
                 model=model_name,
-                gpu_memory_utilization=0.85,
+                gpu_memory_utilization=0.45,
                 max_model_len=4096,
                 trust_remote_code=True,
                 quantization="bitsandbytes",
