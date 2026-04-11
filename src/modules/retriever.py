@@ -11,8 +11,7 @@ from sentence_transformers import SentenceTransformer
 from src.data_models import Document
 from src.modules.abstract_components import PipelineComponent
 from src.utils.metrics import MetricsRecorder
-from src.modules.sparse_encoder import SpladeEncoder
-
+from src.utils.sparse_encoder import SpladeEncoder
 
 from transformers import AutoTokenizer, is_torch_npu_available, AutoModelForMaskedLM
 from vllm import LLM, SamplingParams
@@ -23,6 +22,17 @@ from vllm.inputs.data import TokensPrompt
 
 logger = logging.getLogger(__name__)
 
+def get_model_alias(model_name: str) -> str:
+    """Maps long HuggingFace repo IDs to clean, short aliases for file paths."""
+    if not model_name: return "none"
+    aliases = {
+        "BAAI/bge-m3": "bge_m3",
+        "Qwen/Qwen3-Embedding-0.6B": "qwen_06b",
+        "naver/splade-cocondenser-ensembledistil": "splade",
+    }
+    if model_name in aliases: return aliases[model_name]
+    return model_name.split("/")[-1].replace("-", "").replace(".", "").lower()[:12]
+
 class BaseRetriever(PipelineComponent):
     """Abstract base class for retrievers."""
     def _retrieve(self, query: str) -> List[Document]:
@@ -31,22 +41,33 @@ class BaseRetriever(PipelineComponent):
 
 class VectorDBRetriever(BaseRetriever):
     """Retriever using standard dense vector databases (ChromaDB)."""
-    def __init__(self, collection: str, db_path: str, embedding_model: str, top_k: int = 3, device: str = "cuda", debug: bool = False):
-        self.collection_name = collection
+    def __init__(self, dataset_name: str, root_path: str, dense_model: str, sparse_model: str = "naver/splade-cocondenser-ensembledistil", top_k: int = 3, device: str = "cuda", debug: bool = False):
         self.top_k = top_k
         self.device = device
         self.debug = debug
+
+        safe_dense = get_model_alias(dense_model)
+        is_bgem3 = "bge-m3" in dense_model.lower()
         
-        safe_repo_name = "models--" + embedding_model.replace("/", "--")
+        if is_bgem3 or not sparse_model:
+            combined_name = safe_dense
+        else:
+            safe_sparse = get_model_alias(sparse_model)
+            combined_name = f"{safe_dense}_{safe_sparse}"
+            
+        db_path = os.path.join(root_path, "vector_db", f"{dataset_name}_{combined_name}")
+        self.collection_name = f"{dataset_name}_{combined_name}_docs"
+        
+        safe_repo_name = "models--" + dense_model.replace("/", "--")
         snapshot_dir = f"/hf_cache/hub/{safe_repo_name}/snapshots"
         
         try:
             hash_folder = os.listdir(snapshot_dir)[0]
             local_model_path = os.path.join(snapshot_dir, hash_folder)
         except Exception:
-            local_model_path = embedding_model
+            local_model_path = dense_model
 
-        logger.info(f"Loading Retriever: {embedding_model} on {device}...")
+        logger.info(f"Loading Retriever: {dense_model} on {device}...")
         self.encoder = SentenceTransformer(local_model_path, device=device, trust_remote_code=True, model_kwargs={"dtype": torch.bfloat16})
         self.client = chromadb.PersistentClient(path=db_path)
         
@@ -78,11 +99,14 @@ class VectorDBRetriever(BaseRetriever):
 
         for i in range(len(ids)):
             meta = metadatas[i] if metadatas and i < len(metadatas) else {}
+            real_source_id = meta.get("source_id", ids[i].split("_chunk")[0])
+            
             doc = Document(
-                source_id=ids[i],
+                chunk_id=ids[i],
+                source_id=str(real_source_id),
                 content=docs[i],
                 score=distances[i] if i < len(distances) else 0.0,
-                **meta
+                metadata=meta
             )
             documents.append(doc)
             
@@ -100,21 +124,12 @@ class VectorDBRetriever(BaseRetriever):
         seen = set()
         unique_results = []
         for doc in all_results:
-            if doc.source_id not in seen:
-                seen.add(doc.source_id)
+            cid = getattr(doc, 'chunk_id', doc.source_id)
+            if cid not in seen:
+                seen.add(cid)
                 unique_results.append(doc)
-        
-        sample.retrieved_evidence = unique_results
 
-        if self.debug and self.collection_name == "scifact_corpus":            
-            retrieved_ids = [str(doc.source_id) for doc in unique_results]
-            gold_ids = [str(gid) for gid in sample.gold_evidence]
-            hits = set(retrieved_ids).intersection(set(gold_ids))
-            
-            logger.info(f"\n[DEBUG] Claim {sample.id}:")
-            logger.info(f"   - Gold Refs: {gold_ids}")
-            logger.info(f"   - Retrieved: {retrieved_ids}")
-            logger.info(f"   - Overlap  : {len(hits)} / {len(gold_ids)}")
+        sample.retrieved_evidence = unique_results
 
         return sample
 
@@ -134,13 +149,13 @@ class GoldRetriever(BaseRetriever):
         self.dataset_name = dataset_name.lower()
         self.collection_name = collection
         
-        if self.dataset_name == "scifact" and db_path and collection:
-            logger.info(f"Loading Gold Retriever for SciFact using DB: {db_path}")
+        if db_path and collection:
+            logger.info(f"Loading Gold Retriever for {dataset_name} using DB: {db_path}")
             self.client = chromadb.PersistentClient(path=db_path)
             self.collection = self.client.get_collection(self.collection_name)
         else:
             self.collection = None
-            logger.info(f"Loading Gold Retriever for {dataset_name} (Raw Text Mode)")
+            logger.info(f"Loading Gold Retriever for {dataset_name} (Raw Text Fallback Mode)")
 
     def _retrieve(self, query: str) -> List[Document]:
         return []
@@ -153,9 +168,11 @@ class GoldRetriever(BaseRetriever):
 
         MetricsRecorder.record_retrieval_call(sample)
 
-        if self.dataset_name == "scifact" and self.collection:
+        if self.collection:
             gold_ids = [str(gid) for gid in sample.gold_evidence]
-            results = self.collection.get(ids=gold_ids)
+            results = self.collection.get(
+                where={"source_id": {"$in": gold_ids}}
+            )
             
             docs = results.get("documents", [])
             ids = results.get("ids", [])
@@ -163,18 +180,23 @@ class GoldRetriever(BaseRetriever):
             
             for i in range(len(ids)):
                 meta = metadatas[i] if metadatas and i < len(metadatas) else {}
+                real_source_id = meta.get("source_id", ids[i].split("_chunk")[0])
+                
                 documents.append(Document(
-                    source_id=ids[i],
+                    chunk_id=ids[i],
+                    source_id=str(real_source_id),
                     content=docs[i],
                     score=1.0, 
-                    **meta
+                    metadata=meta
                 ))
-        else:
+        else: # if no db_path and collection
             for i, text in enumerate(sample.gold_evidence):
                 documents.append(Document(
-                    source_id=f"gold_{sample.id}_{i}",
+                    chunk_id=f"gold_{sample.id}_chunk{i}",
+                    source_id=f"gold_{sample.id}",
                     content=str(text),
-                    score=1.0 
+                    score=1.0,
+                    metadata={}
                 ))
                 
         sample.retrieved_evidence = documents
@@ -221,7 +243,7 @@ def _build_qwen3_reranker_prompt(instruction: str, query: str, doc: str) -> list
     ]
 
 
-class Qwen3Reranker:
+class QwenReranker:
     """
     Wrapper around Qwen3-Reranker-0.6B (or any Qwen3-Reranker variant).
 
@@ -259,7 +281,7 @@ class Qwen3Reranker:
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side="left")
         self.model = LLM(model=model_name, 
                             enable_prefix_caching=True, 
-                            gpu_memory_utilization=0.5,
+                            gpu_memory_utilization=0.2,
                             max_model_len=self.max_length,
                             trust_remote_code=True,
                             quantization="bitsandbytes",
@@ -338,20 +360,13 @@ class Qwen3Reranker:
 # ---------------------------------------------------------------------------
 
 class HybridRetriever(BaseRetriever):
-    """
-    Hybrid retriever supporting either:
-      1. Legacy BGE-M3 (Unified Extraction)
-      2. Decoupled Qwen3 (Dense) + SPLADE (Sparse)
-    """
-
     def __init__(
         self,
-        collection: str,
-        db_path: str,
-        sparse_index_path: str,
-        model_type: str = "qwen-splade", # "bgem3" or "qwen-splade"
+        dataset_name: str,
+        root_path: str,
+        model_type: str = "qwen-splade", 
         top_k_retrieve: int = 100,
-        top_k_rerank: int = 60,
+        top_k_rerank: int = 50,
         top_k_final: int = 3,
         rrf_k: int = 60,
         alpha: float = 0.5,
@@ -361,12 +376,10 @@ class HybridRetriever(BaseRetriever):
         reranker_model: str = "Qwen/Qwen3-Reranker-0.6B",
         reranker_instruction: Optional[str] = None,
         reranker_max_length: int = 4096,
-        # ── Decoupled Models Config ─────────────────────────────────────
         dense_model: str = "Qwen/Qwen3-Embedding-0.6B",
         dense_instruction: str = "Retrieve documents that provide explicit evidence to either support or completely refute this claim: ",
         sparse_model: str = "naver/splade-cocondenser-ensembledistil"
     ):
-        self.collection_name = collection
         self.top_k_retrieve = top_k_retrieve
         self.top_k_rerank = top_k_rerank
         self.top_k_final = top_k_final
@@ -377,6 +390,20 @@ class HybridRetriever(BaseRetriever):
         self.model_type = model_type
         self.dense_instruction = dense_instruction
         self.use_reranker = use_reranker
+
+        # Dynamic Path Generation
+        safe_dense = get_model_alias(dense_model)
+        is_bgem3 = "bge-m3" in dense_model.lower()
+        
+        if is_bgem3:
+            combined_name = safe_dense
+        else:
+            safe_sparse = get_model_alias(sparse_model)
+            combined_name = f"{safe_dense}_{safe_sparse}"
+            
+        db_path = os.path.join(root_path, "vector_db", f"{dataset_name}_{combined_name}")
+        self.collection_name = f"{dataset_name}_{combined_name}_docs"
+        sparse_index_path = os.path.join(db_path, "sparse_index.pkl")
 
         # ── 1. Load Encoding Engine ─────────────────────────────────────
         if self.model_type == "bgem3":
@@ -407,7 +434,7 @@ class HybridRetriever(BaseRetriever):
 
         # ── 3. Initialize Reranker ──────────────────────────────────────
         if self.use_reranker:
-            self.reranker = Qwen3Reranker(
+            self.reranker = QwenReranker(
                 model_name=reranker_model,
                 instruction=reranker_instruction,
                 device=device,
@@ -431,7 +458,7 @@ class HybridRetriever(BaseRetriever):
         return list(zip(ids, distances))
     
     def _get_sparse_results(self, query_lexical_weights: Dict[int, float]) -> List[Tuple[str, float]]:
-        doc_scores = defaultdict(float)
+        chunk_scores = defaultdict(float)
         for token_id, query_weight in query_lexical_weights.items():
             tok_str = str(token_id)
             tok_int = int(token_id) if tok_str.isdigit() else None
@@ -443,25 +470,25 @@ class HybridRetriever(BaseRetriever):
                 target_key = tok_int
                 
             if target_key is not None:
-                for doc_id, doc_weight in self.inverted_index[target_key].items():
-                    doc_scores[str(doc_id)] += query_weight * doc_weight
+                for chunk_id, chunk_weight in self.inverted_index[target_key].items():
+                    chunk_scores[str(chunk_id)] += query_weight * chunk_weight
         
-        sorted_docs = sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)
-        return sorted_docs[:self.top_k_retrieve]
+        sorted_chunks = sorted(chunk_scores.items(), key=lambda x: x[1], reverse=True)
+        return sorted_chunks[:self.top_k_retrieve]
     
     def _rrf_fusion(
         self,
         dense_results: List[Tuple[str, float]],
         sparse_results: List[Tuple[str, float]]
     ) -> List[Tuple[str, float]]:
-        """Weighted Reciprocal Rank Fusion → sorted (doc_id, rrf_score) list."""
+        """Weighted Reciprocal Rank Fusion → sorted (chunk_id, rrf_score) list."""
         rrf_scores = defaultdict(float)
         
-        for rank, (doc_id, _) in enumerate(dense_results, start=1):
-            rrf_scores[doc_id] += self.alpha * (1.0 / (self.rrf_k + rank))
+        for rank, (chunk_id, _) in enumerate(dense_results, start=1):
+            rrf_scores[chunk_id] += self.alpha * (1.0 / (self.rrf_k + rank))
             
-        for rank, (doc_id, _) in enumerate(sparse_results, start=1):
-            rrf_scores[doc_id] += (1.0 - self.alpha) * (1.0 / (self.rrf_k + rank))
+        for rank, (chunk_id, _) in enumerate(sparse_results, start=1):
+            rrf_scores[chunk_id] += (1.0 - self.alpha) * (1.0 / (self.rrf_k + rank))
         
         return sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
 
@@ -497,8 +524,8 @@ class HybridRetriever(BaseRetriever):
             logger.info("\n" + "="*50)
             logger.info(f"🔍 DIAGNOSTIC: Dense: {len(dense_results)} | Sparse: {len(sparse_results)}")
             if gold_ids:
-                dense_found  = [doc for doc, _ in dense_results  if doc in gold_ids]
-                sparse_found = [doc for doc, _ in sparse_results if doc in gold_ids]
+                dense_found  = [doc for doc, _ in dense_results  if doc.split("_chunk")[0] in gold_ids]
+                sparse_found = [doc for doc, _ in sparse_results if doc.split("_chunk")[0] in gold_ids]
                 logger.info(f"🟢 GOLD IN DENSE?  {'YES → '+str(dense_found)  if dense_found  else 'NO'}")
                 logger.info(f"🟢 GOLD IN SPARSE? {'YES → '+str(sparse_found) if sparse_found else 'NO'}")
             else:
@@ -518,43 +545,48 @@ class HybridRetriever(BaseRetriever):
             return []
         
         # 6. Fetch texts for the candidate pool
-        candidate_ids = [doc_id for doc_id, _ in candidate_pool]
+        candidate_ids = [chunk_id for chunk_id, _ in candidate_pool]
+
         chroma_results = self.collection.get(
             ids=candidate_ids,
             include=["documents", "metadatas"]
         )
         
         id_to_text = {
-            doc_id: chroma_results["documents"][i]
-            for i, doc_id in enumerate(chroma_results["ids"])
+            chunk_id: chroma_results["documents"][i]
+            for i, chunk_id in enumerate(chroma_results["ids"])
         }
         id_to_meta = {
-            doc_id: (chroma_results["metadatas"][i] or {})
-            for i, doc_id in enumerate(chroma_results["ids"])
+            chunk_id: (chroma_results["metadatas"][i] or {})
+            for i, chunk_id in enumerate(chroma_results["ids"])
         }
         
         # 7. Build Document objects (score = RRF score at this point)
-        candidate_docs = []
-        for doc_id, rrf_score in candidate_pool:
-            if doc_id in id_to_text:
-                candidate_docs.append(Document(
-                    source_id=doc_id,
-                    content=id_to_text[doc_id],
+        candidate_chunks = []
+        for chunk_id, rrf_score in candidate_pool:
+            if chunk_id in id_to_text:
+                metadata = id_to_meta.get(chunk_id, {})
+                # We extract the parent source_id from the metadata
+                chunk_source_id = metadata.get("source_id", chunk_id.split("_chunk")[0])
+                candidate_chunks.append(Document(
+                    source_id=chunk_source_id,
+                    chunk_id=chunk_id,
+                    content=id_to_text[chunk_id],
                     score=float(rrf_score),
-                    **id_to_meta.get(doc_id, {})
+                    metadata=metadata
                 ))
 
         # 8. Optional reranking
         if self.use_reranker and self.reranker is not None:
             if self.debug:
-                pre_ids = [d.source_id for d in candidate_docs]
-                logger.info(f"🔄 Reranking {len(candidate_docs)} candidates → top {self.top_k_final}")
+                pre_ids = [d.chunk_id for d in candidate_chunks]
+                logger.info(f"🔄 Reranking {len(candidate_chunks)} candidates → top {self.top_k_final}")
                 if gold_ids:
-                    gold_in_pool = [d for d in candidate_docs if d.source_id in gold_ids]
+                    gold_in_pool = [d for d in candidate_chunks if d.source_id in gold_ids]
                     logger.info(f"🟢 GOLD IN RERANKER POOL? "
-                                f"{'YES → '+str([d.source_id for d in gold_in_pool]) if gold_in_pool else 'NO'}")
+                                f"{'YES → '+str([d.chunk_id for d in gold_in_pool]) if gold_in_pool else 'NO'}")
 
-            reranked = self.reranker.rerank(query, candidate_docs)
+            reranked = self.reranker.rerank(query, candidate_chunks)
 
             if self.debug and gold_ids:
                 for rank, doc in enumerate(reranked, start=1):
@@ -562,9 +594,9 @@ class HybridRetriever(BaseRetriever):
                         logger.info(f"🏆 GOLD doc rank after reranking: {rank}/{len(reranked)} "
                                     f"(score={doc.score:.4f})")
 
-            candidate_docs = reranked[:self.top_k_final]
+            candidate_chunks = reranked[:self.top_k_final]
         
-        return candidate_docs
+        return candidate_chunks
 
     def process(self, sample):
         all_results = []
@@ -579,8 +611,9 @@ class HybridRetriever(BaseRetriever):
         seen = set()
         unique_results = []
         for doc in all_results:
-            if doc.source_id not in seen:
-                seen.add(doc.source_id)
+            cid = getattr(doc, 'chunk_id', doc.source_id)
+            if cid not in seen:
+                seen.add(cid)
                 unique_results.append(doc)
         
         sample.retrieved_evidence = unique_results

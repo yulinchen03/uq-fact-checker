@@ -1,53 +1,32 @@
 from .retriever import PipelineComponent
 
 class EvidenceAggregator(PipelineComponent):
-    def __init__(self, max_tokens: int, tokenizer=None):
-        self.max_tokens = max_tokens
-        self.tokenizer = tokenizer
+    def __init__(self):
+        pass
     
     def process(self, sample):
-        context_parts = [doc.content for doc in sample.retrieved_evidence]
-        aggregated_context = "\n\n".join(context_parts)
+        # Dictionary to group chunks by their parent document ID
+        grouped_evidence = {}
         
-        # use tokenizer precise token-based truncation
-        if self.tokenizer:
-            # Encode text to tokens (without adding BOS/EOS tokens yet)
-            tokens = self.tokenizer.encode(aggregated_context, add_special_tokens=False)
+        for doc in sample.retrieved_evidence:
+            # Note: Ensure your Document data model has source_id defined!
+            source_id = getattr(doc, 'source_id', "unknown")
             
-            if len(tokens) > self.max_tokens:
-                # 1. Do the precise token slice
-                truncated_tokens = tokens[:self.max_tokens]
+            if source_id not in grouped_evidence:
+                # First time seeing this document, keep the Title formatting intact
+                grouped_evidence[source_id] = doc.content
+            else:
+                # We already have a chunk from this document! 
+                # strip the redundant "Title: [X]\nContent: " prefix to save tokens
+                raw_content = doc.content.split("Content: ", 1)[-1]
                 
-                # 2. Decode back into a string
-                truncated_text = self.tokenizer.decode(truncated_tokens, skip_special_tokens=True)
-                
-                # 3. Find the index of the last sentence-ending punctuation
-                last_period = truncated_text.rfind('.')
-                last_question = truncated_text.rfind('?')
-                last_exclamation = truncated_text.rfind('!')
-                last_punctuation = max(last_period, last_question, last_exclamation)
-                
-                # 4. Slice cleanly at the end of that sentence
-                if last_punctuation != -1:
-                    aggregated_context = truncated_text[:last_punctuation + 1]
-                else:
-                    last_space = truncated_text.rfind(' ')
-                    aggregated_context = truncated_text[:last_space] if last_space != -1 else truncated_text
-
-        # character based fallback (if tokenizer is missing)
-        else:
-            # A standard rule of thumb is ~4 characters per token
-            char_limit = self.max_tokens * 4 
-            if len(aggregated_context) > char_limit:
-                truncated = aggregated_context[:char_limit]
-                last_period = truncated.rfind('.')
-                last_punctuation = max(truncated.rfind('.'), truncated.rfind('?'), truncated.rfind('!'))
-                
-                if last_punctuation != -1:
-                    aggregated_context = truncated[:last_punctuation + 1]
-                else:
-                    last_space = truncated.rfind(' ')
-                    aggregated_context = truncated[:last_space] if last_space != -1 else truncated
+                # Append the new chunk to the existing parent context
+                # We use "[...]" to indicate to the LLM that there is a jump/overlap between chunks
+                grouped_evidence[source_id] += f"\n[...] {raw_content}"
         
-        sample.aggregated_context = aggregated_context
+        # Join the final, deduplicated parent documents together
+        # If top_k=1, this just returns the single chunk
+        context_parts = list(grouped_evidence.values())
+        sample.aggregated_context = "\n\n---\n\n".join(context_parts)
+        
         return sample

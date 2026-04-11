@@ -1,3 +1,4 @@
+import os
 import yaml
 import hydra
 from pathlib import Path
@@ -17,36 +18,50 @@ from src.modules import (
     FactScoreVerifier
 )
 
-from src.modules.retriever import BaseRetriever
+from src.modules.retriever import BaseRetriever, get_model_alias
 from src.utils.llm_client import LocalLLMClient
 
 def _load_retriever(cfg: DictConfig) -> BaseRetriever:
     """Helper to dynamically instantiate the correct retriever based on config."""
     retriever_type = cfg.retriever.get("type", "vector")
+    root_path = cfg.data.get("root_path", ".")
+    dataset_name = cfg.data.dataset_name
     
     if retriever_type == "gold":
+        embedding_model = cfg.retriever.get("embedding_model", "Qwen/Qwen3-Embedding-0.6B")
+        safe_dense = get_model_alias(embedding_model)
+        db_path = os.path.join(root_path, "vector_db", f"{dataset_name}_{safe_dense}")
+        collection_name = f"{dataset_name}_{safe_dense}_docs"
+        
         return GoldRetriever(
-            dataset_name=cfg.data.dataset_name,
-            db_path=cfg.retriever.db_path,
-            collection=cfg.retriever.collection_name
+            dataset_name=dataset_name,
+            db_path=db_path,
+            collection=collection_name
         )
+
     elif retriever_type == "hybrid":
         return HybridRetriever(
-            collection=cfg.retriever.hybrid_collection_name,
-            db_path=cfg.retriever.hybrid_db_path,
-            sparse_index_path=cfg.retriever.sparse_index_path,
+            dataset_name=cfg.data.dataset_name,
+            root_path=root_path,
+            model_type=cfg.retriever.get("model_type", "qwen-splade"),
             top_k_retrieve=cfg.retriever.top_k_retrieve,
+            top_k_rerank=cfg.retriever.top_k_rerank,
             top_k_final=cfg.retriever.top_k_final,
             rrf_k=cfg.retriever.rrf_k,
             alpha=cfg.retriever.get("alpha", 0.5),
             device=cfg.llm.device,
-            debug=cfg.retriever.debug
+            debug=cfg.retriever.debug,
+            use_reranker=cfg.retriever.get("use_reranker", True),
+            reranker_model=cfg.retriever.get("reranker_model", "Qwen/Qwen3-Reranker-0.6B"),
+            dense_model=cfg.retriever.get("dense_model", "Qwen/Qwen3-Embedding-0.6B"),
+            sparse_model=cfg.retriever.get("sparse_model", "naver/splade-cocondenser-ensembledistil")
         )
-    else:
+    else: # 'vector'
         return VectorDBRetriever(
-            collection=cfg.retriever.collection_name,
-            db_path=cfg.retriever.db_path,
-            embedding_model=cfg.retriever.embedding_model,
+            dataset_name=dataset_name,
+            root_path=root_path,
+            dense_model=cfg.retriever.get("embedding_model", "Qwen/Qwen3-Embedding-0.6B"),
+            sparse_model=cfg.retriever.get("sparse_model", "naver/splade-cocondenser-ensembledistil"),
             top_k=cfg.retriever.top_k,
             device=cfg.llm.device,
             debug=cfg.retriever.debug
@@ -55,21 +70,6 @@ def _load_retriever(cfg: DictConfig) -> BaseRetriever:
 def build_pipeline(cfg: DictConfig) -> List[PipelineComponent]:
     """Build a pipeline based on configuration."""
     pipeline = []
-
-    # vLLM has a strict maximum context length.
-    # We must reserve tokens for the generation (max_new_tokens) and the prompt template.
-    max_model_len = cfg.llm.get("max_model_len", 4096)  
-    max_new_tokens = cfg.llm.get("max_new_tokens", 256)
-    template_buffer = 512  # prompt template
-
-    # Calculate exactly how much room is left for the evidence
-    safe_evidence_limit = max_model_len - max_new_tokens - template_buffer
-
-    # Prevent negative values if config is misconfigured
-    safe_evidence_limit = max(safe_evidence_limit, 500) 
-
-    print(f"Using evidence token limit of {safe_evidence_limit} tokens.")
-    context_limit = safe_evidence_limit
 
     # 3. Initialize LLM Client
     print(f"Loading LLM: {cfg.llm.model_name}...")
@@ -80,13 +80,13 @@ def build_pipeline(cfg: DictConfig) -> List[PipelineComponent]:
     
     # 4. Build Components
     if cfg.mode == "always_retrieve": 
-        # --- Dynamically load Vector or Gold retriever ---
+        # First, Retrieve
         pipeline.append(_load_retriever(cfg))
         
-        pipeline.append(EvidenceAggregator(
-            max_tokens=context_limit
-        ))
+        # Then, aggregate evidence
+        pipeline.append(EvidenceAggregator())
 
+        # Finally, verify claim with evidence
         pipeline.append(LLMVerifier(
             llm_client=llm_client, 
             cfg=cfg,
@@ -107,10 +107,7 @@ def build_pipeline(cfg: DictConfig) -> List[PipelineComponent]:
         retriever = _load_retriever(cfg)
         
         # Tool B: Aggregator
-        aggregator = EvidenceAggregator(
-            max_tokens=context_limit, 
-            tokenizer=tokenizer
-        )
+        aggregator = EvidenceAggregator()
         
         # Tool C: RAG Verifier
         rag_verifier_tool = LLMVerifier(llm_client=llm_client, cfg=cfg)
@@ -143,8 +140,7 @@ def build_pipeline(cfg: DictConfig) -> List[PipelineComponent]:
         pipeline.append(FactScoreVerifier(
             llm_client=llm_client, 
             retriever=retriever, 
-            cfg=cfg,
-            max_tokens=context_limit
+            cfg=cfg
         ))
 
     elif cfg.mode == "uq_decompose":
@@ -155,10 +151,7 @@ def build_pipeline(cfg: DictConfig) -> List[PipelineComponent]:
         retriever = _load_retriever(cfg)
 
         # Tool B: Aggregator
-        aggregator = EvidenceAggregator(
-            max_tokens=context_limit,
-            tokenizer=tokenizer
-        )
+        aggregator = EvidenceAggregator()
 
         # Tool C: RAG Verifier
         rag_verifier_tool = LLMVerifier(llm_client=llm_client, cfg=cfg)

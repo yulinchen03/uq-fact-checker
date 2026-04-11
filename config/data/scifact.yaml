@@ -3,11 +3,6 @@ root_path: "./data"
 split: "train"
 calibrated_split: "val"
 calibration_method_used: "threshold_sweep"
-db_path: "./data/vector_db/scifact"
-collection_name: "scifact_docs"
-hybrid_db_path: "./data/vector_db/scifact_hybrid"
-hybrid_collection_name: "scifact_hybrid_dense"
-hybrid_sparse_index_path: "./data/vector_db/scifact_hybrid/sparse_index.pkl"
 top_k: 1
 
 rag_prompt: |

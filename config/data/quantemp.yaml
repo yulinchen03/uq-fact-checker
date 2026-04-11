@@ -3,13 +3,7 @@ root_path: "./data"
 split: "test"
 calibrated_split: "val"
 calibration_method_used: "threshold_sweep"
-db_path: "data/vector_db/quantemp"
-collection_name: "quantemp_docs"
-hybrid_db_path: "data/vector_db/quantemp_hybrid"
-hybrid_collection_name: "quantemp_hybrid_dense"
-hybrid_sparse_index_path: "data/vector_db/quantemp_hybrid/sparse_index.pkl"
-max_context_tokens: 250
-top_k: 1
+top_k: 3
 
 rag_prompt: |
   You are an expert political and economic fact-checker.
