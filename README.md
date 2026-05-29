@@ -55,6 +55,12 @@ You can use `data_prep/create_subset.py` to make a stratified subset of the curr
 python data_prep/create_subset.py
 ```
 
+To initialize and populate the hybrid vector databases (ChromaDB + SPLADE) for retrieval using the dataset corpus files, run:
+
+```bash
+python src/utils/populate_db_hybrid.py
+```
+
 ### Execution
 
 The main entry point for running the pipeline is `scripts/run.py`.
@@ -102,3 +108,13 @@ or
 ## High Performance Computing (HPC)
 
 For large-scale evaluation on clusters like DAIC, please refer to the [HPC Migration Guide](hpc_migration_guide.md) for instructions on using Apptainer, building `.sif` images, and caching HuggingFace models for offline execution.
+
+### Downloading HuggingFace Models on the Cluster
+
+Since compute nodes often lack internet access and HuggingFace is set to offline mode (`HF_HUB_OFFLINE=1`), you must cache your models on the shared network drive beforehand.
+
+1. Open `download_models.slurm` and uncomment or add the `snapshot_download("model_name")` line for the models you need.
+2. Submit the download job from the cluster login node:
+   ```bash
+   sbatch download_models.slurm
+   ```

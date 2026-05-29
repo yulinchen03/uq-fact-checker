@@ -18,15 +18,16 @@ Use `rsync` from your local machine to sync the repository to the cluster, exclu
 rsync -avz --progress --no-perms --no-owner --no-group \
     --exclude='.venv' --exclude='outputs' --exclude='.git' \
     --exclude='QuanTemp' --exclude='visualizations' \
-    --exclude=results_dump \
+    --exclude='results_dump' \
     --exclude='data/vector_db' --exclude='data/quantemp/corpus.json' \
-    --exclude='data/scifact/cross_validation' --exclude='results' \
+    --exclude='data/scifact/cross_validation' \
+    --exclude='results'  --exclude='openai_results' \
     --exclude='__pycache__' --exclude='src/__pycache__' \
     --exclude='thesis_base.def' --exclude='thesis_base.sif' \
     --exclude='.gitignore' --exclude='README.md' \
     --exclude='hpc_migration_guide.md' --exclude='pyproject.toml' --exclude='uv.lock' --exclude='run_results/' \
     /path/to/local/project/ \
-    <username>@<cluster_address>:<path_to_project_root>/Thesis-Project/
+    <username>@<cluster_address>:<path_to_project_root>/
 ```
 
 ### Transfer and Deploy the Apptainer Image
@@ -64,14 +65,14 @@ sinteractive --partition=general,insy --qos=medium --time=12:00:00 --cpus-per-ta
 Once the interactive node is allocated, start the container:
 ```bash
 apptainer shell --nv -C \
-    --bind "<path_to_project_root>/Thesis-Project:/workspace" \
-    --bind "<path_to_project_root>/Thesis-Project/.hf_cache:/hf_cache" \
+    --bind "<path_to_project_root>/workspace" \
+    --bind "<path_to_project_root>/.hf_cache:/hf_cache" \
     --pwd /workspace \
     --env HF_HOME="/hf_cache" \
     --env HF_HUB_OFFLINE=1 \
     --env TMPDIR="/workspace/.tmp" \
     --env UV_CACHE_DIR="/workspace/.uv_cache" \
-    --env-file "<path_to_project_root>/Thesis-Project/.env" \
+    --env-file "<path_to_project_root>/.env" \
     --env PYTHONPATH=/workspace \
     "<path_to_project_root>/apptainer/thesis_base.sif"
 ```
@@ -115,5 +116,5 @@ For long-running evaluation scripts, submit jobs to the SLURM queue.
 
 After experiments finish, transfer the results directory back to your local machine:
 ```bash
-scp -r <username>@<cluster_address>:"<path_to_project_root>/Thesis-Project/run_results" /path/to/local/project/
+scp -r <username>@<cluster_address>:"<path_to_project_root>/run_results" /path/to/local/project/
 ```

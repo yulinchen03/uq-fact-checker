@@ -1,14 +1,17 @@
 import json
 import glob
 from pathlib import Path
+import sys
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 def get_best_model_examples(dataset, split="test"):
-    search_path = f'/home/yulinchen/Desktop/Thesis-Project/results_dump/final/{dataset}/*/uq_aware/Ensemble/results_{split}_label_only_logic_discrete.jsonl'
+    search_path = str(PROJECT_ROOT / "results_dump" / "final" / dataset / "*" / "uq_aware" / "Ensemble" / f"results_{split}_label_only_logic_discrete.jsonl")
     files = glob.glob(search_path)
     
     if not files:
         # Fallback to val if test doesn't exist (e.g. scifact calibration)
-        search_path = f'/home/yulinchen/Desktop/Thesis-Project/results_dump/final/{dataset}/*/uq_aware/Ensemble/results_val_label_only_logic_discrete.jsonl'
+        search_path = str(PROJECT_ROOT / "results_dump" / "final" / dataset / "*" / "uq_aware" / "Ensemble" / "results_val_label_only_logic_discrete.jsonl")
         files = glob.glob(search_path)
         if not files:
             return None, None, None
@@ -58,7 +61,7 @@ def get_best_model_examples(dataset, split="test"):
 
     model_name = Path(best_file).parents[2].name
     threshold = "N/A"
-    t_files = glob.glob(f'/home/yulinchen/Desktop/Thesis-Project/results_dump/final/{dataset}/{model_name}/calibration/optimal_thresholds_*_label_only_logic_discrete.json')
+    t_files = glob.glob(str(PROJECT_ROOT / "results_dump" / "final" / dataset / model_name / "calibration" / "optimal_thresholds_*_label_only_logic_discrete.json"))
     if t_files:
         with open(t_files[0], 'r') as tf:
             t_data = json.load(tf)
@@ -131,7 +134,7 @@ def generate_latex():
 \\end{table*}
 """
     
-    out_path = '/home/yulinchen/Desktop/Thesis-Project/appendix_examples_combined.tex'
+    out_path = PROJECT_ROOT / 'appendix_examples_combined.tex'
     with open(out_path, 'w') as f:
         f.write(latex_out)
     print(f"LaTeX successfully written to {out_path}!")
