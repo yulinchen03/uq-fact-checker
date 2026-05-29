@@ -1,136 +1,104 @@
-<a name="readme-top"></a>
-
-# Msc Thesis Project
+# Efficient LLM Fact-checking With Uncertainty Quantification
 
 **Author**: Yulin Chen
 
-<!-- TABLE OF CONTENTS -->
-<details>
-  <summary>Table of Contents</summary>
-  <ol>
-    <li>
-      <a href="#about-the-project">About The Project</a>
-      <ul>
-        <li><a href="#built-with">Built With</a></li>
-      </ul>
-    </li>
-    <li>
-      <a href="#getting-started">Getting Started</a>
-      <ul>
-        <li><a href="#prerequisites">Prerequisites</a></li>
-        <li><a href="#installation">Installation</a></li>
-      </ul>
-    </li>
-    <li><a href="#usage">Usage</a></li>
-    <li><a href="#roadmap">Roadmap</a></li>
-    <li><a href="#contributing">Contributing</a></li>
-    <li><a href="#license">License</a></li>
-    <li><a href="#contact">Contact</a></li>
-    <li><a href="#acknowledgments">Acknowledgments</a></li>
-  </ol>
-</details>
+This repository contains the codebase and experiment code for the UQ-based RAG fact-checking system presented in our paper "Efficient LLM Fact-checking With Uncertainty Quantification" that dynamically decides when to rely on a Large Language Model's (LLM) parametric knowledge and when to trigger external retrieval based on uncertainty quantification (UQ).
 
+## Architecture
 
+The system evaluates claims using several distinct modes:
+- **Parametric (0% RAG)**: Answers claims using solely the LLM's internal knowledge without any retrieval.
+- **Always Retrieve (100% RAG)**: Always retrieves external evidence (vector database) for every claim.
+- **Granular Verification**: Decomposes complex claims into atomic facts and verifies each independently using retrieval.
+- **UQ-Aware**: Generates a parametric answer, measures the uncertainty of that generation (using metrics like Mean Token Entropy, Max Sequence Probability, etc.), and triggers retrieval only if uncertainty exceeds a calibrated threshold.
+- **UQ Decompose**: Combines UQ-aware selective retrieval with granular decomposition to isolate uncertainty at the atomic fact level. **(Note: This was tested during development, but not used for our final analysis)**
 
-<!-- ABOUT THE PROJECT -->
-## About The Project
+The core pipeline utilizes:
+- [**vLLM**](https://vllm.ai/) for high-throughput LLM inference.
+- [**lm-polygraph**](https://github.com/IINemo/lm-polygraph) for out-of-the-box uncertainty quantification methods.
+- [**ChromaDB**](https://docs.trychroma.com/) & [**SPLADE**](https://huggingface.co/naver/splade-cocondenser-ensembledistil) for hybrid vector/sparse retrieval.
+- [**Hydra**](https://hydra.cc/docs/intro/) for flexible configuration management.
 
-Here's a blank template to get started: To avoid retyping too much info. Do a search and replace with your text editor for the following: `github_username`, `repo_name`, `twitter_handle`, `linkedin_username`, `email_client`, `email`, `project_title`, `project_description`
+## Project Structure
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+- `src/modules/` - Core components of the pipeline (`retriever.py`, `llm_client.py`, `verifier.py`, `uq_verifier.py`, `granular_verifier.py`, etc.).
+- `src/utils/` - Helpers for data loading, threshold calibration, and metrics logging.
+- `scripts/analysis/` - Evaluation scripts to generate tables and plots (`analyze_run.py`, `plot_results.py`, etc.).
+- `config/` - Hydra configuration files. You can update the default run configs inside this folder.
+- `data/` - Stores SciFact and QuanTemp datasets, and vector databases.
+- `run_results/` & `results_dump/` - Generated output files and summaries.
 
-
-
-<!-- GETTING STARTED -->
 ## Getting Started
-
-This is an example of how you may give instructions on setting up your project locally.
-To get a local copy up and running follow these simple example steps.
 
 ### Prerequisites
 
-This is an example of how to list things you need to use the software and how to install them.
-  ```sh
-  uv sync
-  uv pip install transformers==4.49.0
+Ensure you have a modern Python environment (Python 3.10+ recommended). We recommend using `uv` for fast dependency management.
+
+```bash
+# Install dependencies using uv
+uv sync
+# Install the specific version of transformers and sentence-transformers to avoid errors
+uv pip install transformers==4.57.6 sentence-transformers==5.2.3 numpy==1.26.4 torch==2.10.0+cu130
+```
+Make sure to install the cuda version of torch for your system.
+
+Set up your `.env` file with necessary API keys:
+```
+OPENAI_API_KEY=your_key_here
+```
+
+### Data Preparation
+
+You can use `data_prep/create_subset.py` to make a stratified subset of the current datasets for faster testing and development:
+
+```bash
+python data_prep/create_subset.py
+```
+
+### Execution
+
+The main entry point for running the pipeline is `scripts/run.py`.
+
+```bash
+# Run interactively (will prompt for dataset, mode, etc.)
+python scripts/run.py
+
+# Run in headless batch mode using Hydra configuration
+python scripts/run.py data=scifact mode=uq_aware output_format=label_only check_logic=True
+```
+
+### Batch Execution (SLURM)
+
+To execute experiments across multiple models and splits automatically:
+1. Customize `scripts/utils/generate_job_array.py` to manipulate the specific models, datasets, and modes you want to run.
+2. Generate the job array files in the `job_arrays/` directory:
+   ```bash
+   python scripts/utils/generate_job_array.py
+   ```
+3. Once the codebase is transferred to the cluster according to the instructions in the [HPC Migration Guide](hpc_migration_guide.md), navigate to the project folder on the cluster and start the batch run using the provided Slurm scripts as follows:
+```bash
+./start_run_scifact.sh
+or
+./start_run_quantemp.sh
+or
+./start_run_openai.sh
+ ```
+
+## Analysis and Calibration
+
+- **Calibration**: Computes the optimal AUROC threshold on the validation set for UQ methods.
+  ```bash
+  python src/utils/calibrate_threshold.py
+  ```
+- **Analysis**: Evaluates the predictions and generates summary JSONs.
+  ```bash
+  python scripts/analysis/analyze_run.py
+  ```
+- **Visualization**: Generates detailed results tables and visualizations.
+  ```bash
+  python scripts/visualization/plot_results.py
   ```
 
-### Installation
+## High Performance Computing (HPC)
 
-1. Get a free API Key at [https://example.com](https://example.com)
-2. Clone the repo
-   ```sh
-   git clone https://github.com/github_username/repo_name.git
-   ```
-3. Install NPM packages
-   ```sh
-   npm install
-   ```
-4. Enter your API in `config.js`
-   ```js
-   const API_KEY = 'ENTER YOUR API';
-   ```
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-<!-- USAGE EXAMPLES -->
-## Usage
-
-Use this space to show useful examples of how a project can be used. Additional screenshots, code examples and demos work well in this space. You may also link to more resources.
-
-_For more examples, please refer to the [Documentation](https://example.com)_
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-<!-- ROADMAP -->
-## Roadmap
-
-- [ ] Feature 1
-- [ ] Feature 2
-- [ ] Feature 3
-    - [ ] Nested Feature
-
-See the [open issues](https://github.com/github_username/repo_name/issues) for a full list of proposed features (and known issues).
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-<!-- LICENSE -->
-## License
-
-Distributed under the MIT License. See `LICENSE.txt` for more information.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-<!-- CONTACT -->
-## Contact
-
-Your Name - [@twitter_handle](https://twitter.com/twitter_handle) - email@email_client.com
-
-Project Link: [https://github.com/github_username/repo_name](https://github.com/github_username/repo_name)
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-<!-- ACKNOWLEDGMENTS -->
-## Acknowledgments
-
-* []()
-* []()
-* []()
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-<!-- MARKDOWN LINKS & IMAGES -->
-[license-url]: https://github.com/github_username/repo_name/blob/master/LICENSE.txt
-[linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?
+For large-scale evaluation on clusters like DAIC, please refer to the [HPC Migration Guide](hpc_migration_guide.md) for instructions on using Apptainer, building `.sif` images, and caching HuggingFace models for offline execution.

@@ -66,7 +66,7 @@ def main():
     args = parse_args()
 
     # --- FIXED: Use dynamic pathing to locate the results folder ---
-    json_path = project_root / "results" / "benchmarks" / args.save_results_folder / "retrieval_exp.json"
+    json_path = project_root / "run_results" / "benchmarks" / args.save_results_folder / "retrieval_exp.json"
     
     if not json_path.exists():
         print(f"❌ Error: Could not find {json_path.relative_to(project_root)}")

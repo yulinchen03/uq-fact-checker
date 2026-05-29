@@ -1,70 +1,104 @@
 import logging
-import json
-import re
+import pickle
+from pathlib import Path
 
 from lm_polygraph.model_adapters import WhiteboxModelvLLM
+from lm_polygraph.utils.generation_parameters import GenerationParameters
 from vllm import SamplingParams
+from vllm.sampling_params import StructuredOutputsParams
 from src.utils.metrics import MetricsRecorder
 from .abstract_components import PipelineComponent
-from .uncertainty_aware_verifier import UQVerifier
+from .uq_verifier import UQVerifier
 from src.data_models import FactCheckSample
-
+from transformers import AutoTokenizer
 
 class UQDecomposePipeline(PipelineComponent):
-    """
-    Uncertainty-aware pipeline with atomic claim decomposition.
-    
-    Flow:
-        1. Run full claim through UQ verifier for initial verdict + uncertainty score
-        2. If confident (score < threshold) → return verdict directly
-        3. If uncertain → decompose into atomic claims
-        4. Verify each atomic claim with UQ verifier
-        5. Atoms with high uncertainty → trigger per-atom RAG
-        6. Aggregate all atomic verdicts into final label
-    """
-
     def __init__(self, cfg, retriever, aggregator, rag_verifier, decomposer, model=None, tokenizer=None):
         self.cfg = cfg
         self.tokenizer = tokenizer
+        self.model_name = cfg.llm.model_name
+        self.output_format = cfg.get("output_format", "label_only")
+        self.dataset = cfg.data.dataset_name.lower()
 
-        # Initialize lm-polygraph using vLLM adapter
         if model and tokenizer:
-            max_tokens = getattr(cfg.llm, "max_new_tokens", 1024)
-            
-            gen_params = SamplingParams(
-                temperature=0.0,
-                max_tokens=max_tokens,
-                logprobs=5,
-                stop=["<|im_end|>", "<|eot_id|>", "```", "<|im_start|>", "<|start_header_id|>"]
-            )
-            
-            self.whitebox_model = WhiteboxModelvLLM(
-                model,
-                sampling_params=gen_params
-            )
+            GEN_TEMPERATURE = 0.5 if cfg.uncertainty.method == "SemanticEntropy" else 0.0
+            GEN_STOP_TOKENS = ["<|im_end|>", "<|eot_id|>", "```", "<|im_start|>", "<|start_header_id|>"]
 
-            # --- HOTFIX FOR LM-POLYGRAPH VLLM BUG ---
+            if self.output_format == "label_only":
+                allowed_labels = ["True", "False", "Conflicting"] if "quantemp" in self.dataset else ["SUPPORT", "CONTRADICT", "NOT ENOUGH INFO"]
+                gen_params = SamplingParams(
+                    temperature=GEN_TEMPERATURE,
+                    max_tokens=5,
+                    logprobs=10,
+                    stop=GEN_STOP_TOKENS,
+                    structured_outputs=StructuredOutputsParams(choice=allowed_labels)
+                )
+            else:
+                max_tokens = getattr(cfg.llm, "max_new_tokens", 256)
+                gen_params = SamplingParams(
+                    temperature=GEN_TEMPERATURE,
+                    max_tokens=max_tokens,
+                    logprobs=10,
+                    stop=GEN_STOP_TOKENS
+                )
+
+            if getattr(self.tokenizer, "eos_token", None) is None and getattr(self.tokenizer, "eos_token_id", None) is not None:
+                self.tokenizer.eos_token = self.tokenizer.decode(self.tokenizer.eos_token_id)
+            
+            # GenerationParameters must mirror SamplingParams because WhiteboxModelvLLM.__init__
+            # overwrites sampling_params fields (temperature, top_k, top_p, stop) with these values.
+            gen_parameters = GenerationParameters(
+                temperature=GEN_TEMPERATURE,
+                stop_strings=GEN_STOP_TOKENS,
+            )
+            self.whitebox_model = WhiteboxModelvLLM(model, sampling_params=gen_params, generation_parameters=gen_parameters)
             self.whitebox_model.supports_logprobs = True
-            # ----------------------------------------
+
+            # Mistral does not support vLLM's tokenizer — force-load HuggingFace tokenizer
+            if "Mistral" in tokenizer.__class__.__name__:
+                hf_tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+                if getattr(hf_tokenizer, "pad_token", None) is None:
+                    if getattr(hf_tokenizer, "eos_token", None):
+                        hf_tokenizer.pad_token = hf_tokenizer.eos_token
+                    else:
+                        hf_tokenizer.pad_token = hf_tokenizer.decode(hf_tokenizer.eos_token_id)
+                self.whitebox_model.tokenizer = hf_tokenizer
 
         self.retriever = retriever
         self.aggregator = aggregator
         self.rag_verifier = rag_verifier
         self.decomposer = decomposer
 
-        # UQ Engine (Parametric)
-        self.uq_engine = UQVerifier(
-            model=self.whitebox_model,
-            estimator_name=cfg.uncertainty.method
-        )
-
-        # Prompts and config
-        self.dataset = cfg.data.dataset_name.lower()
-        self.parametric_prompt = cfg.prompts.parametric
+        self.primary_estimator = cfg.uncertainty.method
         self.threshold = cfg.uncertainty.threshold
-        self.calibration_mode = cfg.uncertainty.get("calibration_mode", False)
 
-        # Dataset-specific labels for aggregation
+        project_root = Path(__file__).resolve().parents[2]
+        model_name = getattr(cfg.llm, "model_name", "").split("/")[-1]
+        calib_split = cfg.data.get("calibrated_split", "val")
+
+        check_logic = cfg.get("check_logic", False)
+        logic_method = cfg.get("logic_eval_method", "")
+        logic_suffix = f"_logic_{logic_method}" if check_logic and logic_method else ""
+
+        model_bundle_filename = f"ensemble_model_bundle_{calib_split}_{self.output_format}{logic_suffix}.pkl"
+        model_bundle_path = project_root / "run_results" / cfg.data.dataset_name / model_name / "calibration" / model_bundle_filename
+        
+        self.ensemble_bundle = None
+        if model_bundle_path.exists():
+            with open(model_bundle_path, "rb") as f:
+                self.ensemble_bundle = pickle.load(f)
+
+        if self.primary_estimator == "Ensemble":
+            if not self.ensemble_bundle:
+                raise ValueError(f"Ensemble selected but bundle not found at {model_bundle_path}")
+            estimators = self.ensemble_bundle["features"]
+            print(f"⚙️ Ensemble Active: Loading required features {estimators}")
+        else:
+            estimators = [self.primary_estimator]
+            print(f"⚙️ Single Metric Active: Loading {estimators}")
+
+        self.uq_engine = UQVerifier(model=self.whitebox_model, estimator_name=estimators)
+
         if "scifact" in self.dataset:
             self.label_true = "SUPPORT"
             self.label_false = "CONTRADICT"
@@ -74,207 +108,103 @@ class UQDecomposePipeline(PipelineComponent):
             self.label_false = "False"
             self.label_other = "Conflicting"
 
-        self.verdict_parser = {
-            "scifact": self._parse_scifact,
-            "quantemp": self._parse_quantemp
-        }
-
     def process(self, sample: FactCheckSample) -> FactCheckSample:
-        # ===== STEP 1: Whole-Claim UQ Pass =====
-        raw_response, score, parametric_verdict, parametric_explanation = self._run_uq_pass(sample)
+        prompt_template = self.cfg.prompts.parametric_short if self.output_format == "label_only" else self.cfg.prompts.parametric_long
+            
+        raw_response, uq_scores_dict, parametric_verdict, parametric_explanation, p_tokens, r_tokens, llm_calls = self.uq_engine.verify_claim(
+            claim=sample.claim,
+            prompt_template=prompt_template,
+            dataset_name=self.dataset,
+            output_format=self.output_format,
+            primary_estimator=self.primary_estimator,
+            ensemble_bundle=self.ensemble_bundle
+        )
 
-        sample.uncertainty_score = score
+        MetricsRecorder.record_token_usage(sample, input_tokens=p_tokens, output_tokens=r_tokens, step="uq")
+        MetricsRecorder.record_llm_call(sample, count=llm_calls)
+
+        score = uq_scores_dict.get(self.primary_estimator, float('inf'))
+
+        sample.uq_scores = uq_scores_dict
+        sample.uncertainty_score = float(score) if score is not None else None
         sample.parametric_response = raw_response
         sample.parametric_verdict = parametric_verdict
 
-        # ===== Calibration Mode: UQ-only, skip everything else =====
-        if self.calibration_mode:
-            sample.predicted_verdict = parametric_verdict
-            sample.explanation = parametric_explanation
-            sample.uq_flagged = False
-            return sample
-
-        # ===== STEP 2: Decision =====
         is_uncertain = score >= self.threshold
 
         if not is_uncertain:
-            # [CONFIDENT] Return the parametric verdict directly
             sample.predicted_verdict = parametric_verdict
             sample.explanation = parametric_explanation
             sample.uq_flagged = False
             return sample
 
-        # ===== STEP 3: Decompose into Atomic Claims =====
         sample.uq_flagged = True
         sample = self.decomposer.process(sample)
 
-        # ===== STEP 4: Per-Atom UQ Verification =====
         atom_results = []
-
-        # Optimization: if decomposition yielded only 1 atom (same as original claim),
-        # skip per-atom UQ since we already know the claim is uncertain from Step 1.
         skip_atom_uq = len(sample.atomic_facts) == 1
 
         for atom in sample.atomic_facts:
             if skip_atom_uq:
-                # Go directly to RAG — no point re-running UQ on the same claim
                 atom_verdict, atom_explanation, evidence_blocks = self._rag_verify_atom(sample, atom)
                 atom_results.append({
-                    "atom": atom,
-                    "verdict": atom_verdict,
-                    "raw_output": atom_explanation,
-                    "uncertainty_score": score,  # reuse whole-claim score
-                    "rag_triggered": True,
-                    "evidence": evidence_blocks
+                    "atom": atom, "verdict": atom_verdict, "raw_output": atom_explanation,
+                    "uncertainty_score": float(score) if score is not None else None,
+                    "uq_scores": uq_scores_dict, "rag_triggered": True, "evidence": evidence_blocks
                 })
                 continue
 
-            atom_verdict, atom_explanation, atom_score = self._verify_atom(sample, atom)
-
+            atom_verdict, atom_explanation, atom_uq_scores = self._verify_atom(sample, atom, prompt_template)
+            atom_score = atom_uq_scores.get(self.primary_estimator, float('inf'))
             atom_uncertain = atom_score >= self.threshold
 
             if atom_uncertain:
-                # ===== STEP 5: Per-Atom RAG (only for uncertain atoms) =====
                 atom_verdict, atom_explanation, evidence_blocks = self._rag_verify_atom(sample, atom)
                 atom_results.append({
-                    "atom": atom,
-                    "verdict": atom_verdict,
-                    "raw_output": atom_explanation,
-                    "uncertainty_score": atom_score,
-                    "rag_triggered": True,
-                    "evidence": evidence_blocks
+                    "atom": atom, "verdict": atom_verdict, "raw_output": atom_explanation,
+                    "uncertainty_score": float(atom_score) if atom_score is not None else None,
+                    "uq_scores": atom_uq_scores, "rag_triggered": True, "evidence": evidence_blocks
                 })
             else:
                 atom_results.append({
-                    "atom": atom,
-                    "verdict": atom_verdict,
-                    "raw_output": atom_explanation,
-                    "uncertainty_score": atom_score,
-                    "rag_triggered": False,
-                    "evidence": []
+                    "atom": atom, "verdict": atom_verdict, "raw_output": atom_explanation,
+                    "uncertainty_score": float(atom_score) if atom_score is not None else None,
+                    "uq_scores": atom_uq_scores, "rag_triggered": False, "evidence": []
                 })
 
-        # ===== STEP 6: Aggregate =====
         sample.atomic_verdicts = atom_results
-        final_label = self._aggregate_results(atom_results)
-        sample.predicted_verdict = final_label
+        sample.predicted_verdict = self._aggregate_results(atom_results)
         sample.explanation = f"Aggregated from {len(atom_results)} atomic verdicts."
 
         return sample
 
-    # -------------------------------------------------------------------------
-    # Internal Helpers
-    # -------------------------------------------------------------------------
+    def _verify_atom(self, sample: FactCheckSample, atom: str, prompt_template: str):
+        """Runs a single atomic claim through the UQ verifier."""
+        raw_resp, atom_uq_scores, verdict, explanation, p_tokens, r_tokens, llm_calls = self.uq_engine.verify_claim(
+            claim=atom,
+            prompt_template=prompt_template,
+            dataset_name=self.dataset,
+            output_format=self.output_format,
+            primary_estimator=self.primary_estimator,
+            ensemble_bundle=self.ensemble_bundle
+        )
 
-    def _run_uq_pass(self, sample: FactCheckSample):
-        """Runs the whole-claim through UQ verifier and parses the response."""
-        clean_prompt = self.parametric_prompt.format(claim=sample.claim).replace("```json", "").strip()
-        messages = [{"role": "user", "content": clean_prompt}]
-        full_prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        full_prompt += "```json\n"
+        MetricsRecorder.record_token_usage(sample, input_tokens=p_tokens, output_tokens=r_tokens, step="uq")
+        MetricsRecorder.record_llm_call(sample, count=llm_calls)
 
-        raw_response, score = self.uq_engine.estimate(full_prompt)
-
-        # Strip prompt echo from response
-        clean_response = raw_response
-        if full_prompt in raw_response:
-            clean_response = raw_response.replace(full_prompt, "", 1).strip()
-        elif raw_response.startswith(full_prompt.strip()):
-            clean_response = raw_response[len(full_prompt.strip()):].strip()
-
-        if self.tokenizer:
-            prompt_tokens = len(self.tokenizer.encode(full_prompt))
-            response_tokens = len(self.tokenizer.encode(clean_response)) if clean_response else 0
-            MetricsRecorder.record_token_usage(
-                sample,
-                input_tokens=prompt_tokens,
-                output_tokens=response_tokens,
-                step="uq"
-            )
-            MetricsRecorder.record_llm_call(sample)
-
-        # Parse the response
-        final_clean = clean_response.strip().replace("```json", "").replace("```", "").strip()
-
-        json_target = final_clean
-        json_match = re.search(r'(\{.*?\})', final_clean, re.DOTALL)
-        if json_match:
-            json_target = json_match.group(1)
-
-        verdict = self._parse_verdict(json_target)
-
-        try:
-            parsed_json = json.loads(json_target)
-            explanation = parsed_json.get("explanation", "No explanation could be extracted from the model response.")
-            if "verdict" in parsed_json:
-                verdict = self._parse_verdict(parsed_json["verdict"])
-        except json.JSONDecodeError:
-            explanation = f"Failed to parse explanation. Raw output: {final_clean}"
-
-        return final_clean, score, verdict, explanation
-
-    def _verify_atom(self, sample: FactCheckSample, atom: str):
-        """Runs a single atomic claim through the UQ verifier (parametric only)."""
-        clean_prompt = self.parametric_prompt.format(claim=atom).replace("```json", "").strip()
-        messages = [{"role": "user", "content": clean_prompt}]
-        full_prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        full_prompt += "```json\n"
-
-        raw_response, score = self.uq_engine.estimate(full_prompt)
-
-        # Strip prompt echo
-        clean_response = raw_response
-        if full_prompt in raw_response:
-            clean_response = raw_response.replace(full_prompt, "", 1).strip()
-        elif raw_response.startswith(full_prompt.strip()):
-            clean_response = raw_response[len(full_prompt.strip()):].strip()
-
-        if self.tokenizer:
-            prompt_tokens = len(self.tokenizer.encode(full_prompt))
-            response_tokens = len(self.tokenizer.encode(clean_response)) if clean_response else 0
-            MetricsRecorder.record_token_usage(
-                sample,
-                input_tokens=prompt_tokens,
-                output_tokens=response_tokens,
-                step="uq"
-            )
-            MetricsRecorder.record_llm_call(sample)
-
-        # Parse
-        final_clean = clean_response.strip().replace("```json", "").replace("```", "").strip()
-        json_target = final_clean
-        json_match = re.search(r'(\{.*?\})', final_clean, re.DOTALL)
-        if json_match:
-            json_target = json_match.group(1)
-
-        verdict = self._parse_verdict(json_target)
-
-        try:
-            parsed_json = json.loads(json_target)
-            explanation = parsed_json.get("explanation", "No explanation extracted.")
-            if "verdict" in parsed_json:
-                verdict = self._parse_verdict(parsed_json["verdict"])
-        except json.JSONDecodeError:
-            explanation = f"Failed to parse. Raw: {final_clean}"
-
-        return verdict, explanation, score
+        return verdict, explanation, atom_uq_scores
 
     def _rag_verify_atom(self, sample: FactCheckSample, atom: str):
-        """Retrieves evidence and re-verifies a single uncertain atom via RAG."""
-        # Determine retriever type
         is_gold = type(self.retriever).__name__ == "GoldRetriever"
 
         if is_gold:
-            # Gold retriever uses the full sample's evidence
             if not sample.retrieved_evidence:
                 self.retriever.process(sample)
             evidence_chunks = sample.retrieved_evidence
         else:
-            # Vector retriever: targeted micro-retrieval for this atom
             evidence_chunks = self.retriever._retrieve(atom)
             MetricsRecorder.record_retrieval_call(sample)
 
-        # 1. Build a temporary sample to feed into the aggregator
         temp_sample = FactCheckSample(
             id=sample.id,
             claim=atom,
@@ -282,16 +212,11 @@ class UQDecomposePipeline(PipelineComponent):
         )
         temp_sample.retrieved_evidence = evidence_chunks
 
-        # 2. Let the EvidenceAggregator handle the smart merging & formatting!
         temp_sample = self.aggregator.process(temp_sample)
-        
-        # Track the raw blocks for logging/evaluation purposes
         evidence_blocks = [chunk.content for chunk in evidence_chunks]
 
-        # 3. Run the RAG verifier on the perfectly formatted sample
         temp_sample = self.rag_verifier.process(temp_sample)
 
-        # 4. Record metrics on the REAL sample
         MetricsRecorder.record_token_usage(
             sample,
             input_tokens=temp_sample.metrics.gen_input_tokens,
@@ -302,42 +227,30 @@ class UQDecomposePipeline(PipelineComponent):
 
         return temp_sample.predicted_verdict, temp_sample.explanation, evidence_blocks
 
-    # -------------------------------------------------------------------------
-    # Verdict Parsing & Aggregation (shared with existing modules)
-    # -------------------------------------------------------------------------
-
-    def _parse_verdict(self, text):
-        strategy = self.verdict_parser.get(self.dataset)
-        if strategy:
-            return strategy(text)
-        return "NOT ENOUGH INFO"
-
-    def _parse_scifact(self, text):
-        t = text.upper()
-        if "SUPPORT" in t: return "SUPPORT"
-        if "CONTRADICT" in t or "REFUTE" in t: return "CONTRADICT"
-        return "NOT ENOUGH INFO"
-
-    def _parse_quantemp(self, text):
-        t = text.upper()
-        if "FALSE" in t: return "False"
-        if "TRUE" in t: return "True"
-        if "CONFLICT" in t: return "Conflicting"
-        return "Conflicting"
-
     def _aggregate_results(self, fact_results: list) -> str:
-        """Translates atomic verdicts into a final discrete label (FActScore-style)."""
+        """Majority-vote aggregation with 2/3 supermajority threshold."""
         verdicts = [res["verdict"] for res in fact_results]
 
-        if len(verdicts) <= 1:
-            return verdicts[0] if verdicts else self.label_other
+        if not verdicts:
+            return self.label_other
 
-        support_count = verdicts.count(self.label_true)
-        contradict_count = verdicts.count(self.label_false)
+        if len(verdicts) <= 1 or len(set(verdicts)) == 1:
+            return verdicts[0]
 
-        if contradict_count > 0:
-            return self.label_false
-        elif support_count == len(verdicts):
+        neutral_count = verdicts.count(self.label_other)
+        true_count = verdicts.count(self.label_true)
+        false_count = verdicts.count(self.label_false)
+        
+        if neutral_count >= (true_count + false_count):
+            return self.label_other
+
+        filtered_verdicts = [v for v in verdicts if v != self.label_other]
+
+        true_ratio = true_count / len(filtered_verdicts)
+
+        if true_ratio >= 2/3:
             return self.label_true
+        elif true_ratio < 1/3:
+            return self.label_false
         else:
             return self.label_other

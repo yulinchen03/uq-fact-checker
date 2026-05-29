@@ -11,7 +11,6 @@ class LocalDataLoader:
         dataset_name = dataset_name.lower()
         base_path = self.data_root / dataset_name
         
-        # 1. Flexible File Resolution
         file_jsonl = base_path / f"claims_{split}.jsonl"
         file_json = base_path / f"claims_{split}.json"
         
@@ -26,7 +25,6 @@ class LocalDataLoader:
 
         print(f"Loading {dataset_name} from {file_path}...")
 
-        # 2. Unified File Reading
         if is_jsonl:
             with open(file_path, 'r', encoding='utf-8') as f:
                 data_list = [json.loads(line) for line in f if line.strip()]
@@ -34,37 +32,26 @@ class LocalDataLoader:
             with open(file_path, 'r', encoding='utf-8') as f:
                 data_list = json.load(f)
 
-        # 3. Generalized Parsing
         samples = []
         for idx, data in enumerate(data_list):
-            
-            # --- ID Extraction ---
-            # Use native ID if it exists, otherwise generate a stable fallback
             sample_id = str(data.get("id", f"{split}_{idx}"))
             
-            # --- Label Extraction ---
             if "label" in data:
                 raw_label = str(data["label"])
             else:
                 raw_label = self._extract_scifact_label(data)
                 
-            # --- Evidence Extraction ---
             gold_ids = []
             evidence = data.get("evidence")
             
-            # Format A: SciFact Nested Dictionary
             if isinstance(evidence, dict):
                 gold_ids = list(evidence.keys())
-            # Format B: Flat List
             elif isinstance(evidence, list):
                 gold_ids = [str(x) for x in evidence if not isinstance(x, dict)]
             
-            # Format C: QuanTemp direct doc_id or raw text fallback
             if not gold_ids:
-                if data.get("doc_id"):
-                    gold_ids = [str(data["doc_id"])]
-                elif data.get("doc"):
-                    gold_ids = [str(data["doc"]).strip()]
+                if data.get("cited_doc_ids"):
+                    gold_ids = [str(x) for x in data["cited_doc_ids"]]
 
             sample = FactCheckSample(
                 id=sample_id,

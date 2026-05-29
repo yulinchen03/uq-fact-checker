@@ -58,6 +58,8 @@ def get_model_alias(model_name: str) -> str:
     aliases = {
         "BAAI/bge-m3": "bge_m3",
         "Qwen/Qwen3-Embedding-0.6B": "qwen_06b",
+        "Qwen/Qwen3-Embedding-4B": "qwen_4b",
+        "Qwen/Qwen3-Embedding-8B": "qwen_8b",
         "naver/splade-cocondenser-ensembledistil": "splade",
     }
     

@@ -2,46 +2,75 @@ dataset_name: "quantemp"
 root_path: "./data"
 split: "test"
 calibrated_split: "val"
-calibration_method_used: "threshold_sweep"
-top_k: 3
+top_k: 2
 
-rag_prompt: |
+rag_short: |
   You are an expert political and economic fact-checker.
-  Verify the validity of a claim by cross-referencing it strictly against the provided retrieved context.
+  Verify the veracity of the following claim by cross-referencing it strictly against the provided evidence.
 
   CRITICAL INSTRUCTIONS:
-  1. Choose "True" ONLY IF the evidence explicitly contains findings, numbers, or data that confirm the claim.
-  2. Choose "False" ONLY IF the evidence explicitly contains findings or data that prove the claim is incorrect.
-  3. Choose "Conflicting" ONLY IF the provided evidence contains multiple pieces of information or statistics that conflict regarding the claim.
-  4. Explanation: Limit to MAX 2 sentences. Focus only on the specific data points from the evidence that justify the verdict.
-  5. Format: Return a valid JSON object. Provide "explanation" then "verdict".
-  6. Constraint: Do not repeat the claim text. Do not use filler phrases.
-  7. No think tags or internal reasoning.
+  1. Choose "True" if the evidence contains findings, numbers, or data that confirm the claim.
+  2. Choose "False" if the evidence contains findings or data that prove the claim is incorrect.
+  3. Choose "Conflicting" if the provided evidence contains multiple pieces of information or statistics that conflict with each other regarding the claim.
+
+  Evidence: "{context}"
+  Claim: "{claim}"
+  Response:
+
+
+rag_long: |
+  You are an expert political and economic fact-checker.
+  Verify the veracity of the following claim by cross-referencing it strictly against the provided evidence.
+
+  CRITICAL INSTRUCTIONS:
+  1. Choose "True" if the evidence contains findings, numbers, or data that confirm the claim.
+  2. Choose "False" if the evidence contains findings or data that prove the claim is incorrect.
+  3. Choose "Conflicting" if the provided evidence contains multiple pieces of information or statistics that conflict with each other regarding the claim.
+  4. Base your decision entirely on the provided text.
+  5. Explanation: Limit to MAX 2 sentences. Focus only on the specific data points from the evidence that justify the verdict.
+  6. Format: Return a valid JSON object. Provide "explanation" then "verdict".
+  7. Constraint: Do not repeat the claim text. Do not use filler phrases.
+  8. No think tags or internal reasoning.
 
   REQUIRED FORMAT:
   {{
-  "explanation": "<max 2 sentences>",
-  "verdict": "<True, False, or Conflicting>"
+    "explanation": "<max 2 sentences>",
+    "verdict": "<True, False, or Conflicting>"
   }}
 
   Evidence: "{context}"
   Claim: "{claim}"
-
   Response:
   ```json
 
-parametric_prompt: |
-  You are a political and economic fact-checker. 
-  Verify the validity of the following claim using your internal knowledge base.
+
+parametric_short: |
+    You are an expert political and economic fact-checker. 
+    Verify the veracity of the following claim using your internal knowledge only.
+    
+    CRITICAL INSTRUCTIONS:
+    1. Evaluate the claim based on the most likely historical or economic data, making your best assessment.
+    2. Choose "True" if standard consensus leans towards the numbers or dates being correct.
+    3. Choose "False" if the claim likely contains incorrect numbers, dates, or factual errors.
+    4. Choose "Conflicting" ONLY IF you specifically know of credible, contradictory datasets or reports that make a single truth impossible. Do not use this label simply because you cannot remember the exact numbers.
+
+    Claim: "{claim}"
+    Response:
+
+
+parametric_long: |
+  You are an expert political and economic fact-checker. 
+  Verify the veracity of the following claim using your internal knowledge only.
 
   CRITICAL INSTRUCTIONS:
-  1. Choose "True" ONLY IF the claim is factually correct according to standard, universally accepted historical or scientific consensus.
-  2. Choose "False" ONLY IF the claim is factually incorrect or has been definitively disproven.
-  3. Choose "Conflicting" ONLY IF the claim involves a topic where expert consensus is actively divided, and credible evidence exists to support both sides of the argument.
-  4. Explanation: Limit to MAX 2 sentences. State only the relevant fact that led to your verdict.
-  5. Format: Return a valid JSON object. Provide "explanation" then "verdict".
-  6. Constraint: Do not repeat the claim. Do not provide background history.
-  7. No think tags or internal reasoning.
+  1. Evaluate the claim based on the most likely historical or economic data, making your best assessment.
+  2. Choose "True" if standard consensus leans towards the numbers or dates being correct.
+  3. Choose "False" if the claim likely contains incorrect numbers, dates, or factual errors.
+  4. Choose "Conflicting" ONLY IF you specifically know of credible, contradictory datasets or reports that make a single truth impossible. Do not use this label simply because you cannot remember the exact numbers.
+  5. Explanation: Limit to MAX 2 sentences. State only the relevant fact that led to your verdict.
+  6. Format: Return a valid JSON object. Provide "explanation" then "verdict".
+  7. Constraint: Do not repeat the claim. Do not provide background history.
+  8. No think tags or internal reasoning.
 
   REQUIRED FORMAT:
   {{
@@ -50,29 +79,5 @@ parametric_prompt: |
   }}
 
   Claim: "{claim}"
-  Response:
-  ```json
-
-atomic_baseline_prompt: |
-  Evaluate the political/economic claim against the provided text. Output a single-line JSON object with the verdict ONLY.
-
-  Labels:
-  * True: Text explicitly confirms the claim with matching numbers/data.
-  * False: Text explicitly refutes the claim with contradictory data.
-  * Conflicting: Text contains multiple data points or expert opinions that contradict each other regarding the claim.
-
-  CRITICAL RULES:
-  1. Statistical and numerical claims must match the text exactly to be "True".
-  2. Account for standard economic/political abbreviations (e.g., "GDP", "IMF").
-  3. DO NOT GUESS
-
-  REQUIRED FORMAT:
-  {{
-    "verdict": "<True, False, or Conflicting>",
-  }}
-
-  Context: "{context}"
-  Claim: "{claim}"
-
   Response:
   ```json

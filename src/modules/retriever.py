@@ -17,8 +17,6 @@ from transformers import AutoTokenizer, is_torch_npu_available, AutoModelForMask
 from vllm import LLM, SamplingParams
 from vllm.distributed.parallel_state import destroy_model_parallel
 import gc
-import math
-from vllm.inputs.data import TokensPrompt
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +26,8 @@ def get_model_alias(model_name: str) -> str:
     aliases = {
         "BAAI/bge-m3": "bge_m3",
         "Qwen/Qwen3-Embedding-0.6B": "qwen_06b",
+        "Qwen/Qwen3-Embedding-4B": "qwen_4b",
+        "Qwen/Qwen3-Embedding-8B": "qwen_8b",
         "naver/splade-cocondenser-ensembledistil": "splade",
     }
     if model_name in aliases: return aliases[model_name]
@@ -39,12 +39,13 @@ class BaseRetriever(PipelineComponent):
         raise NotImplementedError
 
 
-class VectorDBRetriever(BaseRetriever):
+class DenseRetriever(BaseRetriever):
     """Retriever using standard dense vector databases (ChromaDB)."""
-    def __init__(self, dataset_name: str, root_path: str, dense_model: str, sparse_model: str = "naver/splade-cocondenser-ensembledistil", top_k: int = 3, device: str = "cuda", debug: bool = False):
+    def __init__(self, dataset_name: str, db_path: str, dense_model: str, sparse_model: str = "naver/splade-cocondenser-ensembledistil", top_k: int = 3, device: str = "cuda", debug: bool = False):
         self.top_k = top_k
         self.device = device
         self.debug = debug
+        self.db_path = db_path
 
         safe_dense = get_model_alias(dense_model)
         is_bgem3 = "bge-m3" in dense_model.lower()
@@ -55,7 +56,7 @@ class VectorDBRetriever(BaseRetriever):
             safe_sparse = get_model_alias(sparse_model)
             combined_name = f"{safe_dense}_{safe_sparse}"
             
-        db_path = os.path.join(root_path, "vector_db", f"{dataset_name}_{combined_name}")
+        self.db_path = os.path.join(self.db_path, f"{dataset_name}_{combined_name}")
         self.collection_name = f"{dataset_name}_{combined_name}_docs"
         
         safe_repo_name = "models--" + dense_model.replace("/", "--")
@@ -69,7 +70,7 @@ class VectorDBRetriever(BaseRetriever):
 
         logger.info(f"Loading Retriever: {dense_model} on {device}...")
         self.encoder = SentenceTransformer(local_model_path, device=device, trust_remote_code=True, model_kwargs={"dtype": torch.bfloat16})
-        self.client = chromadb.PersistentClient(path=db_path)
+        self.client = chromadb.PersistentClient(path=self.db_path)
         
         try:
             self.collection = self.client.get_collection(self.collection_name)
@@ -281,11 +282,11 @@ class QwenReranker:
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side="left")
         self.model = LLM(model=model_name, 
                             enable_prefix_caching=True, 
-                            gpu_memory_utilization=0.2,
+                            gpu_memory_utilization=0.23, # ~10gb VRAM, 4b model in bf16 needs ~8gb + kv cache
                             max_model_len=self.max_length,
                             trust_remote_code=True,
-                            quantization="bitsandbytes",
-                            load_format="bitsandbytes",
+                            # quantization="bitsandbytes",
+                            # load_format="bitsandbytes",
                             enforce_eager=True)
 
         # Resolve the token ids for "yes" and "no" once at init time.
@@ -329,7 +330,7 @@ class QwenReranker:
             batch_prompts.append({"prompt_token_ids": input_ids})
 
         # Ask for top 20 logprobs to ensure we capture the probabilities of 'yes' and 'no'
-        sampling_params = SamplingParams(max_tokens=1, temperature=0.0, logprobs=20)
+        sampling_params = SamplingParams(max_tokens=1, temperature=0.1, logprobs=20)
         
         outputs = self.model.generate(batch_prompts, sampling_params=sampling_params, use_tqdm=False)
 
@@ -363,7 +364,7 @@ class HybridRetriever(BaseRetriever):
     def __init__(
         self,
         dataset_name: str,
-        root_path: str,
+        db_path: str,
         model_type: str = "qwen-splade", 
         top_k_retrieve: int = 100,
         top_k_rerank: int = 50,
@@ -390,6 +391,7 @@ class HybridRetriever(BaseRetriever):
         self.model_type = model_type
         self.dense_instruction = dense_instruction
         self.use_reranker = use_reranker
+        self.db_path = db_path
 
         # Dynamic Path Generation
         safe_dense = get_model_alias(dense_model)
@@ -401,9 +403,9 @@ class HybridRetriever(BaseRetriever):
             safe_sparse = get_model_alias(sparse_model)
             combined_name = f"{safe_dense}_{safe_sparse}"
             
-        db_path = os.path.join(root_path, "vector_db", f"{dataset_name}_{combined_name}")
+        self.db_path = os.path.join(self.db_path, f"{dataset_name}_{combined_name}")
         self.collection_name = f"{dataset_name}_{combined_name}_docs"
-        sparse_index_path = os.path.join(db_path, "sparse_index.pkl")
+        sparse_index_path = os.path.join(self.db_path, "sparse_index.pkl")
 
         # ── 1. Load Encoding Engine ─────────────────────────────────────
         if self.model_type == "bgem3":
@@ -419,8 +421,8 @@ class HybridRetriever(BaseRetriever):
             raise ValueError(f"Unknown model_type: {self.model_type}")
 
         # ── 2. Initialize Chroma & Pickled Indexes ──────────────────────
-        logger.info(f"Connecting to ChromaDB at {db_path}...")
-        self.client = chromadb.PersistentClient(path=db_path)
+        logger.info(f"Connecting to ChromaDB at {self.db_path}...")
+        self.client = chromadb.PersistentClient(path=self.db_path)
         try:
             self.collection = self.client.get_collection(self.collection_name)
         except Exception as e:
@@ -492,11 +494,9 @@ class HybridRetriever(BaseRetriever):
         
         return sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
 
-    # ── Main retrieval entry point ──────────────────────────────────────
 
     def _retrieve(self, query: str, gold_ids: List[str] = None) -> List[Document]:
         
-        # 1. Route Query Encoding based on Model Type
         if self.model_type == "bgem3":
             query_output = self.encoder.encode(
                 [query], return_dense=True, return_sparse=True, return_colbert_vecs=False, batch_size=1
@@ -506,7 +506,10 @@ class HybridRetriever(BaseRetriever):
             query_sparse = query_output["lexical_weights"][0]
         else:
             # Qwen3 Dense + SPLADE Sparse
-            full_query = f"{self.dense_instruction}{query}" if self.dense_instruction else query
+            if self.dense_instruction:
+                full_query = f"Instruct: {self.dense_instruction}\nQuery: {query}"
+            else:
+                full_query = query
             
             # Explicitly cap max_length for the dense query just to be safe
             self.dense_encoder.max_seq_length = 512
@@ -515,27 +518,26 @@ class HybridRetriever(BaseRetriever):
             # SPLADE encodes the raw query without the dense instruction
             query_sparse = self.sparse_encoder.encode([query], max_length=512)[0]
         
-        # 2. Dual Retrieval
         dense_results  = self._get_dense_results(query_dense)
         sparse_results = self._get_sparse_results(query_sparse)
         
-        # 3. Diagnostics
         if self.debug:
             logger.info("\n" + "="*50)
-            logger.info(f"🔍 DIAGNOSTIC: Dense: {len(dense_results)} | Sparse: {len(sparse_results)}")
+            logger.info(f"🔍 DIAGNOSTIC: Dense: {len(dense_results)} results | Sparse: {len(sparse_results)} results")
+            logger.info(f"🔍 Gold IDs: {gold_ids}")
             if gold_ids:
-                dense_found  = [doc for doc, _ in dense_results  if doc.split("_chunk")[0] in gold_ids]
-                sparse_found = [doc for doc, _ in sparse_results if doc.split("_chunk")[0] in gold_ids]
-                logger.info(f"🟢 GOLD IN DENSE?  {'YES → '+str(dense_found)  if dense_found  else 'NO'}")
-                logger.info(f"🟢 GOLD IN SPARSE? {'YES → '+str(sparse_found) if sparse_found else 'NO'}")
+                dense_found  = [doc for doc, _ in dense_results[:10]  if doc.split("_chunk")[0] in gold_ids]
+                sparse_found = [doc for doc, _ in sparse_results[:10] if doc.split("_chunk")[0] in gold_ids]
+                logger.info(f"🔍 Top 10 Dense: {dense_results[:10]}")
+                logger.info(f"🔍 Top 10 Sparse: {sparse_results[:10]}")
+                logger.info(f"🟢 GOLD IN DENSE TOP 10?  {'YES → '+str(dense_found)  if dense_found  else 'NO'}")
+                logger.info(f"🟢 GOLD IN SPARSE TOP 10? {'YES → '+str(sparse_found) if sparse_found else 'NO'}")
             else:
                 logger.info("⚪ NO GOLD EVIDENCE FOR THIS CLAIM")
             logger.info("="*50)
         
-        # 4. RRF Fusion
         fused_results = self._rrf_fusion(dense_results, sparse_results)
 
-        # 5. Determine how many candidates to materialise from DB
         if self.use_reranker and self.reranker is not None:
             candidate_pool = fused_results[:self.top_k_rerank]
         else:
@@ -544,7 +546,6 @@ class HybridRetriever(BaseRetriever):
         if not candidate_pool:
             return []
         
-        # 6. Fetch texts for the candidate pool
         candidate_ids = [chunk_id for chunk_id, _ in candidate_pool]
 
         chroma_results = self.collection.get(
@@ -561,7 +562,6 @@ class HybridRetriever(BaseRetriever):
             for i, chunk_id in enumerate(chroma_results["ids"])
         }
         
-        # 7. Build Document objects (score = RRF score at this point)
         candidate_chunks = []
         for chunk_id, rrf_score in candidate_pool:
             if chunk_id in id_to_text:
@@ -576,7 +576,6 @@ class HybridRetriever(BaseRetriever):
                     metadata=metadata
                 ))
 
-        # 8. Optional reranking
         if self.use_reranker and self.reranker is not None:
             if self.debug:
                 pre_ids = [d.chunk_id for d in candidate_chunks]

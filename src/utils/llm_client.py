@@ -4,6 +4,7 @@ from transformers import AutoTokenizer
 from tenacity import retry, stop_after_attempt, wait_fixed
 import logging
 from vllm import LLM, SamplingParams
+from vllm.sampling_params import StructuredOutputsParams
 import os
 from google import genai
 from google.genai import types
@@ -20,20 +21,17 @@ class LocalLLMClient:
 
         print(f"Initializing vLLM Engine: {model_name}...")
         try:
-            # Initialize the shared vLLM engine.
             self.llm = LLM(
                 model=model_name,
-                gpu_memory_utilization=0.45,
+                gpu_memory_utilization=0.47, # ~21gb vram, 30b model in 4 bit needs ~15gb + overhead + kv cache
                 max_model_len=4096,
                 trust_remote_code=True,
                 quantization="bitsandbytes",
                 load_format="bitsandbytes",
+                enforce_eager=True
             )
             
-            # Permanently bakes "use_tqdm=False" into this specific vLLM engine 
-            # instance's generate method so lm-polygraph calls it silently.
             self.llm.generate = partial(self.llm.generate, use_tqdm=False)
-            
             self.tokenizer = self.llm.get_tokenizer()
             print("✅ vLLM Engine successfully loaded.")
             
@@ -42,43 +40,57 @@ class LocalLLMClient:
             raise
 
     def get_backend_objects(self):
-        # We pass the vLLM engine itself to lm-polygraph, NOT the HF model!
         return self.llm, self.tokenizer
 
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
     def generate(self, prompt_text: str, config: dict) -> dict:
-        """
-        Generates text using the vLLM engine (used by your RAG verifier).
-        """
         try:
-            # 1. Format Input
+            suffix = ""
+            if prompt_text.endswith("\nVerdict:"):
+                prompt_text = prompt_text[:-9].strip()
+                suffix = "\nVerdict:"
+            elif prompt_text.endswith("\n```json\n"):
+                prompt_text = prompt_text[:-9].strip()
+                suffix = "\n```json\n"
+
             messages = [{"role": "user", "content": prompt_text}]
-            text = self.tokenizer.apply_chat_template(
-                messages, 
-                tokenize=False, 
-                add_generation_prompt=True
-            )
+            
+            try:
+                text = self.tokenizer.apply_chat_template(
+                    messages, 
+                    tokenize=False, 
+                    add_generation_prompt=True
+                )
+            except ValueError:
+                text = prompt_text + "\n\n"
+                
+            text += suffix
             
             max_new_tokens = config.get("max_new_tokens", 1024) 
+            output_format = config.get("output_format", "full_response")
+            dataset_name = config.get("dataset", "scifact")
 
-            # 2. Configure vLLM Sampling
-            sampling_params = SamplingParams(
-                temperature=0.0, # Greedy decoding
-                max_tokens=max_new_tokens,
-                stop=["<|im_end|>", "<|eot_id|>", "```"]
-            )
+            if output_format == "label_only":
+                allowed_labels = ["True", "False", "Conflicting"] if "quantemp" in dataset_name.lower() else ["SUPPORT", "CONTRADICT", "NOT ENOUGH INFO"]
+                sampling_params = SamplingParams(
+                    temperature=0.1, 
+                    max_tokens=5, 
+                    stop=["<|im_end|>", "<|eot_id|>", "```", "<|im_start|>", "<|start_header_id|>"],
+                    structured_outputs=StructuredOutputsParams(choice=allowed_labels)
+                )
+            else:
+                sampling_params = SamplingParams(
+                    temperature=0.1, 
+                    max_tokens=max_new_tokens,
+                    stop=["<|im_end|>", "<|eot_id|>", "<|im_start|>", "<|start_header_id|>"]
+                )
 
-            # 3. Inference
             outputs = self.llm.generate([text], sampling_params)
             
-            # 4. Extract Output
             output = outputs[0]
             decoded_output = output.outputs[0].text.strip()
-            
-            # Clean up trailing backticks
             decoded_output = decoded_output.replace("```json", "").replace("```", "").strip()
 
-            # 5. Return Structured Response (ready for your .jsonl storage)
             return {
                 "content": decoded_output,
                 "usage": {
@@ -92,7 +104,6 @@ class LocalLLMClient:
             raise
 
     def close(self):
-        """Properly shuts down the vLLM engine and frees resources."""
         try:
             if hasattr(self, 'llm'):
                 if hasattr(self.llm, 'llm_engine'):
@@ -160,7 +171,7 @@ class GeminiLLMClient:
             
             generation_config = types.GenerateContentConfig(
                 max_output_tokens=max_new_tokens,
-                temperature=0.0,
+                temperature=0.1,
                 safety_settings=safety_settings
             )
             
@@ -206,19 +217,25 @@ class GeminiLLMClient:
 
 
 class OpenAILLMClient:
-    def __init__(self, model_name: str = "gpt-5.4-nano-2026-03-17", api_key: str = None):     
+    def __init__(self, model_name: str = "gpt-5.4-nano-2026-03-17", api_key: str = None,
+                 base_url: str = None, api_key_env: str = "OPENAI_API_KEY"):     
         self.model_name = model_name
-        self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
+        self.api_key = api_key or os.environ.get(api_key_env)
         
-        if not self.api_key or self.api_key == "your_openai_api_key_here":
-            raise ValueError("OPENAI_API_KEY environment variable is missing or placeholder.")
+        if not self.api_key or self.api_key in ("your_openai_api_key_here", "your_api_key_here"):
+            raise ValueError(f"{api_key_env} environment variable is missing or placeholder.")
         
         try:
-            print(f"Initializing OpenAI Client: {model_name}...")
-            self.client = OpenAI(timeout=20.0)
-            print("✅ OpenAI Client successfully loaded.")
+            provider = f" (via {base_url})" if base_url else ""
+            print(f"Initializing OpenAI-Compatible Client: {model_name}{provider}...")
+            self.client = OpenAI(api_key=self.api_key, base_url=base_url, timeout=60.0)
+            self.base_url = base_url
+            self.total_input_tokens = 0
+            self.total_output_tokens = 0
+            self.total_calls = 0
+            print("✅ OpenAI-Compatible Client successfully loaded.")
         except Exception as e:
-            logger.error(f"Failed to load OpenAI client: {e}")
+            logger.error(f"Failed to load OpenAI-compatible client: {e}")
             raise
 
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
@@ -227,18 +244,58 @@ class OpenAILLMClient:
         Generates text using the OpenAI API.
         """
         try:
-            # We explicitly override small max_new_tokens just like the Gemini client
+            # --- Suffix Handling ---
+            # The verifier appends "\nVerdict:" or "\n```json\n" to prompts for
+            # local text-completion style generation. For chat API models, we
+            # strip these entirely — they are not needed in the chat format.
+            if prompt_text.endswith("\nVerdict:"):
+                prompt_text = prompt_text[:-9].strip()
+            elif prompt_text.endswith("\n```json\n"):
+                prompt_text = prompt_text[:-9].strip()
+
             max_new_tokens = config.get("max_new_tokens", 4096)
-            temperature = config.get("temperature", 0.0)
+            output_format = config.get("output_format", "full_response")
             
-            response = self.client.chat.completions.create(
+            messages = []
+            
+            if output_format == "label_only":
+                # System message enforces strict label-only output, since
+                # API models lack the constrained decoding used by LocalLLMClient.
+                dataset = config.get("dataset", "scifact")
+                if "quantemp" in dataset.lower():
+                    allowed = "True, False, or Conflicting"
+                else:
+                    allowed = "SUPPORT, CONTRADICT, or NOT ENOUGH INFO"
+                    
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        f"Respond with EXACTLY ONE label: {allowed}. "
+                        "Do not include explanations, reasoning, formatting, "
+                        "markdown, punctuation, or the word 'Verdict'. "
+                        "Output only the raw label text."
+                    )
+                })
+                max_new_tokens = 20  # "NOT ENOUGH INFO" ≈ 4 tokens
+            else:
+                # For full_response (JSON), ensure enough room for the response
+                max_new_tokens = max(max_new_tokens, 256)
+            
+            messages.append({"role": "user", "content": prompt_text})
+            
+            # Only pass enable_thinking for non-OpenAI providers (e.g., Qwen
+            # via DashScope) that support it. The standard OpenAI API rejects
+            # this parameter with a 400 error.
+            api_kwargs = dict(
                 model=self.model_name,
-                messages=[
-                    {"role": "user", "content": prompt_text}
-                ],
-                temperature=temperature,
+                messages=messages,
+                temperature=0.1,
                 max_completion_tokens=max_new_tokens,
             )
+            if self.base_url:
+                api_kwargs["extra_body"] = {"enable_thinking": False}
+            
+            response = self.client.chat.completions.create(**api_kwargs)
             
             # Extract finish reason to diagnose abrupt stops (e.g., "stop" or "length")
             finish_reason = "UNKNOWN"
@@ -270,6 +327,14 @@ class OpenAILLMClient:
                 input_tokens = response.usage.prompt_tokens
                 output_tokens = response.usage.completion_tokens
 
+            # Accumulate running totals
+            self.total_input_tokens += input_tokens
+            self.total_output_tokens += output_tokens
+            self.total_calls += 1
+            print(f"    [TOKEN USAGE] Call #{self.total_calls}: {input_tokens} in / {output_tokens} out | "
+                  f"Running total: {self.total_input_tokens} in / {self.total_output_tokens} out "
+                  f"({self.total_input_tokens + self.total_output_tokens} total)")
+
             return {
                 "content": decoded_output,
                 "usage": {
@@ -281,6 +346,17 @@ class OpenAILLMClient:
             logger.error(f"Error generating text via OpenAI: {e}")
             raise
             
+    def get_backend_objects(self):
+        """Stub for API-based clients — no local model/tokenizer objects."""
+        return None, None
+
     def close(self):
-        """Cleanup method if your pipeline explicitly calls close()."""
-        pass
+        """Print final token usage summary and clean up."""
+        print(f"\n{'='*50}")
+        print(f"  📊 OPENAI TOKEN USAGE SUMMARY")
+        print(f"  Model:         {self.model_name}")
+        print(f"  Total Calls:   {self.total_calls}")
+        print(f"  Input Tokens:  {self.total_input_tokens:,}")
+        print(f"  Output Tokens: {self.total_output_tokens:,}")
+        print(f"  Total Tokens:  {self.total_input_tokens + self.total_output_tokens:,}")
+        print(f"{'='*50}")

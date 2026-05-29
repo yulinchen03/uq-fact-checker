@@ -1,8 +1,13 @@
 import json
 import os
 import re
+import sys
 from pathlib import Path
 from tqdm import tqdm
+
+
+project_root = Path(__file__).resolve().parents[2]
+sys.path.append(str(project_root))
 
 # Import your custom LLM client
 from src.utils.llm_client import LocalLLMClient

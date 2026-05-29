@@ -124,4 +124,4 @@ def build_chunked_corpus(data_dir="data/scifact"):
     print(f"  - Output saved to: {output_corpus}")
 
 if __name__ == "__main__":
-    build_chunked_corpus()
+    build_chunked_corpus(data_dir="data/quantemp")

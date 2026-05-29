@@ -3,23 +3,29 @@ defaults:
   - _self_
 
 experiment_name: "thesis"
-mode: "always_retrieve" # "always_retrieve" | "never_retrieve" | "uq_aware" | "factscore" | "uq_decompose"
+mode: "always_retrieve" # "always_retrieve" | "never_retrieve" | "uq_aware" | "granular" | "uq_decompose"
+output_format: "label_only"
+logic_eval_method: "discrete"
+check_logic: True
 
 retriever:
+  db_path: null
   type: "hybrid"                    # "vector" | "hybrid" | "gold"
-  embedding_model: "Qwen/Qwen3-Embedding-0.6B"
+  embedding_model: "Qwen/Qwen3-Embedding-4B"
   sparse_model: "naver/splade-cocondenser-ensembledistil"
-  reranker_model: "Qwen/Qwen3-Reranker-0.6B"
+  reranker_model: "Qwen/Qwen3-Reranker-4B"
   top_k: ${data.top_k}
-  debug: True
+  debug: False
   # --- Hybrid Retriever settings (resolved per dataset) ---
   model_type: "qwen-splade"
-  use_reranker: False
+  use_reranker: True
   top_k_retrieve: 100
   top_k_rerank: 50
   top_k_final: ${data.top_k}
   rrf_k: 60
   alpha: 0.5
+  # -- Setup settings --
+  batch_size: 8
 
 llm:
   provider: "local_huggingface"
@@ -28,43 +34,51 @@ llm:
   max_model_len: 4096
   max_new_tokens: 256
   do_sample: False
+  # --- OpenAI-compatible API settings (used only by openai_* modes) ---
+  api_base_url: null                 # e.g., "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+  api_key_env: "OPENAI_API_KEY"      # e.g., "DASHSCOPE_API_KEY" for Qwen
 
 prompts:
-  rag: ${data.rag_prompt}
-
-  parametric: ${data.parametric_prompt}
+  rag_short: ${data.rag_short}
+  rag_long: ${data.rag_long}
+  parametric_short: ${data.parametric_short}
+  parametric_long: ${data.parametric_long}
 
 uncertainty:
   method: "MeanTokenEntropy"
   threshold: 0.0
-  calibration_mode: True
 
 decomposer:
   prompt: |
-    You are a strict linguistic expert with the sole task of breaking down complex claims into simple, independent, and atomic facts.
+    You are a strict, highly precise text processing system. Your only task is to break down complex claims into a list of simple, independent atomic facts.
     
-    IMPORTANT RULES:
-    1. Each fact MUST be independently verifiable, but you MUST strictly carry over terms provided in the source claim without inventing your own.
-    2. Maintain all vital context (dates, locations, specific entities, temporal links) in EVERY atomic claim. Do not strip out "When", "Where", or "Who".
-    3. Resolve all pronouns and demonstratives (he, she, it, they, this, that) by replacing them with the specific nouns they refer to. 
-    4. NO EXTERNAL KNOWLEDGE: Do not define jargon, explain acronyms, or derive categories (e.g., do not explain that a specific cell is an "immune cell").
-    5. NO QUESTIONS: Treat acronyms (like "DNA") or complex jargon as proper nouns. NEVER ask for clarification or pose questions to the user.
-    6. If the claim is already a single, atomic fact, just output the claim itself exactly as written.
-    7. STRICT FORMATTING: DO NOT output any introductory text, conversational filler, or explanations. ONLY output the bulleted list.
+    CRITICAL RULES:
+    1. Break the claim into self-contained, simple statements.
+    2. Split compound subjects (e.g., "A and B do X") or lists into separate independent claims.
+    3. Resolve all pronouns (e.g., "it", "they") to their specific entities.
+    4. If the claim is already a single, simple fact, just output that one fact.
+    5. NEVER output conversational filler (e.g., "Sure", "Here is the list", "I'm ready").
+    6. You MUST format every single fact as a bullet point starting exactly with "- ".
+    7. Do not generate new examples. Stop generating immediately after processing the provided claim.
 
-    Example 1:
-    Input: <claim>Repealing the sales tax on boats in Rhode Island has spawned 2,000 companies, 7,000 jobs and close to $2 billion a year in sales activity.</claim>
-    Output: 
-    - The sales tax on boats was repealed in Rhode Island.
-    - Repealing the sales tax on boats in Rhode Island has spawned 2,000 companies.
-    - Repealing the sales tax on boats in Rhode Island has spawned 7,000 jobs.
-    - Repealing the sales tax on boats in Rhode Island has spawned close to $2 billion a year in sales activity.
+    EXAMPLE 1:
+    Claim: "Barack Obama, the 44th US President, was born in Hawaii and later moved to Indonesia."
+    Output:
+    - Barack Obama was the 44th US President.
+    - Barack Obama was born in Hawaii.
+    - Barack Obama moved to Indonesia.
 
-    Example 2:
-    Input: <claim>40mg/day dosage of folic acid and 2mg/day dosage of vitamin B12 does not affect chronic kidney disease (CKD) progression.</claim>
-    Output: 
-    - 40mg/day dosage of folic acid does not affect chronic kidney disease (CKD) progression.
-    - 2mg/day dosage of vitamin B12 does not affect chronic kidney disease (CKD) progression.
+    EXAMPLE 2:
+    Claim: "A 40mg dosage of Drug X and a 2mg dosage of Drug Y do not affect progression of disease Z."
+    Output:
+    - A 40mg dosage of Drug X does not affect progression of disease Z.
+    - A 2mg dosage of Drug Y does not affect progression of disease Z.
 
-    Input: <claim>{claim}</claim>
+    EXAMPLE 3:
+    Claim: "Drug A targets the cardiac muscle."
+    Output:
+    - Drug A targets the cardiac muscle.
+
+    NOW PROCESS THIS CLAIM:
+    Claim: "{claim}"
     Output:

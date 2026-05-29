@@ -161,5 +161,6 @@ data/quantemp/corpus.json
 *.sif
 tests
 results/archives
-results/active_run
-results_dump
+results_dump/
+openai_results/
+decomp_exp/

@@ -10,32 +10,48 @@ class LLMVerifier(PipelineComponent):
     def __init__(self, llm_client, cfg):
         self.llm_client = llm_client
         self.cfg = cfg
+        self.dataset = cfg.data.dataset_name.lower()
+        self.output_format = cfg.get("output_format", "label_only")
 
     def process(self, sample):
-        # 1. Select Template
-        if sample.mode in ("always_retrieve", "uq_aware", "uq_decompose"):
-            template = self.cfg.prompts.rag
+        if sample.mode in ("always_retrieve", "openai_always_retrieve", "uq_aware", "uq_decompose"):
+            if self.output_format == "label_only":
+                template = self.cfg.prompts.rag_short
+            else:
+                template = self.cfg.prompts.rag_long
+                
             context = sample.aggregated_context if sample.aggregated_context else "No relevant evidence found."
             prompt = template.format(claim=sample.claim, context=context)
             
-        elif sample.mode == "never_retrieve":
-            template = self.cfg.prompts.parametric
+        elif sample.mode in ("never_retrieve", "openai_never_retrieve"):
+            if self.output_format == "label_only":
+                template = self.cfg.prompts.parametric_short
+            else:
+                template = self.cfg.prompts.parametric_long
+                
             prompt = template.format(claim=sample.claim)
         
         else:
             raise ValueError(f"Unknown mode: {sample.mode}")
 
-        # 2. Prepare Config (Map generic config to HF specific params)
+        prompt = prompt.replace("```json", "").strip()
+        
+        if self.output_format == "label_only":
+            if not prompt.endswith("Verdict:"):
+                prompt += "\nVerdict:"
+            max_tokens = 5
+        else:
+            prompt += "\n```json\n"
+            max_tokens = self.cfg.llm.get("max_new_tokens", 1024)
+
         generation_config = {
-            "max_new_tokens": self.cfg.llm.get("max_new_tokens", 1024), 
+            "max_new_tokens": max_tokens, 
+            "output_format": self.output_format,
+            "dataset": self.dataset
         }
 
-        # 3. Generate
-        # We assume llm_client.generate takes the raw prompt string
         response = self.llm_client.generate(prompt, generation_config)
 
-        # 4. Record Metrics
-        # Use the helper class because sample.metrics is a Pydantic object, not a dict
         usage = response.get("usage", {})
         MetricsRecorder.record_token_usage(
             sample,
@@ -45,50 +61,51 @@ class LLMVerifier(PipelineComponent):
         )
         MetricsRecorder.record_llm_call(sample)
 
-        print("*"*100)
-        print(response.get("content", ""))
-        print("*"*100)
-
-        # 5. Parse Response
-        verdict, explanation = self._parse_response(response.get("content", ""))
+        raw_content = response.get("content", "")
+        verdict, explanation = self._parse_response(raw_content)
         
-        # 6. Update Sample
         sample.predicted_verdict = verdict
         sample.explanation = explanation
 
         return sample
 
     def _parse_response(self, text: str) -> tuple:
-        """
-        Robustly parses LLM response by isolating the JSON dictionary.
-        """
-        clean_text = text.strip()
+        clean_text = text.strip().replace("```json", "").replace("```", "").strip()
         
-        verdict = "NOT ENOUGH INFO"
-        explanation = "Parsing failed."
+        verdict_str = clean_text
+        explanation = "Label only generation." if self.output_format == "label_only" else "Parsing failed."
 
-        # 1. Isolate the JSON block (everything from the first '{' to the last '}')
-        # re.DOTALL ensures it reads across newlines!
         match = re.search(r'(\{.*\})', clean_text, re.DOTALL)
-        
         if match:
-            json_string = match.group(1)
             try:
-                data = json.loads(json_string)
-                verdict = data.get("verdict", verdict)
+                data = json.loads(match.group(1))
+                verdict_str = data.get("verdict", verdict_str)
                 explanation = data.get("explanation", explanation)
-                return verdict.upper(), explanation
             except json.JSONDecodeError:
                 pass
+        elif self.output_format == "full_response":
+            verdict_match = re.search(r'"?verdict"?\s*:\s*"?([A-Za-z_]+)"?', clean_text, re.IGNORECASE)
+            if verdict_match:
+                verdict_str = verdict_match.group(1)
                 
-        # 2. Aggressive Regex Fallback (Upgraded to handle newlines and formatting quirks)
-        verdict_match = re.search(r'"?verdict"?\s*:\s*"?([A-Za-z_]+)"?', clean_text, re.IGNORECASE)
-        if verdict_match:
-            verdict = verdict_match.group(1)
+            explanation_match = re.search(r'"?explanation"?\s*:\s*"?(.+?)(?:"\s*\}|"$)', clean_text, re.IGNORECASE | re.DOTALL)
+            if explanation_match:
+                explanation = explanation_match.group(1).strip()
+                
+        t = str(verdict_str).upper()
+        
+        if self.dataset == "scifact":
+            if "SUPPORT" in t: verdict = "SUPPORT"
+            elif "CONTRADICT" in t or "REFUTE" in t: verdict = "CONTRADICT"
+            else: verdict = "NOT ENOUGH INFO"
             
-        # Matches "explanation": "..." capturing across newlines until the closing brace
-        explanation_match = re.search(r'"?explanation"?\s*:\s*"?(.+?)(?:"\s*\}|"$)', clean_text, re.IGNORECASE | re.DOTALL)
-        if explanation_match:
-            explanation = explanation_match.group(1).strip()
+        elif self.dataset == "quantemp":
+            if "FALSE" in t: verdict = "False"
+            elif "TRUE" in t: verdict = "True"
+            elif "CONFLICT" in t: verdict = "Conflicting"
+            else: verdict = "Conflicting"
+            
+        else:
+            verdict = "NOT ENOUGH INFO"
 
-        return verdict.upper(), explanation
+        return verdict, explanation

@@ -1,0 +1,37 @@
+Model,Method,AUROC,Threshold,Coverage,Risk,TPR,TNR
+Llama-3.1-8B-Instruct,Ensemble [Logic Check On],0.648,0.486,45.5%,0.302,0.681,0.558
+Llama-3.1-8B-Instruct,MeanTokEnt,0.645,0.314,42.1%,0.297,0.709,0.519
+Llama-3.1-8B-Instruct,MeanTokEnt [Logic Check On],0.645,0.314,42.1%,0.297,0.709,0.519
+Llama-3.1-8B-Instruct,Ensemble,0.645,0.506,49.4%,0.316,0.638,0.593
+Llama-3.1-8B-Instruct,MaxSeqProb,0.643,0.250,44.6%,0.308,0.681,0.542
+Llama-3.1-8B-Instruct,MaxSeqProb [Logic Check On],0.643,0.250,44.5%,0.308,0.681,0.541
+Llama-3.1-8B-Instruct,Perplexity,0.642,1.133,44.6%,0.308,0.681,0.542
+Llama-3.1-8B-Instruct,Perplexity [Logic Check On],0.642,1.133,44.6%,0.309,0.681,0.541
+Llama-3.1-8B-Instruct,LogicalContradiction [Logic Check On],0.474,inf,100.0%,0.431,0.000,1.000
+Mistral-7B-Instruct-v0.3,Ensemble,0.707,0.497,54.3%,0.324,0.626,0.693
+Mistral-7B-Instruct-v0.3,Ensemble [Logic Check On],0.705,0.522,59.7%,0.344,0.564,0.741
+Mistral-7B-Instruct-v0.3,MaxSeqProb [Logic Check On],0.669,0.145,35.7%,0.274,0.792,0.490
+Mistral-7B-Instruct-v0.3,MaxSeqProb,0.668,0.145,35.7%,0.275,0.791,0.490
+Mistral-7B-Instruct-v0.3,Perplexity [Logic Check On],0.622,1.045,31.7%,0.276,0.814,0.433
+Mistral-7B-Instruct-v0.3,Perplexity,0.621,1.045,31.7%,0.276,0.814,0.433
+Mistral-7B-Instruct-v0.3,MeanTokEnt [Logic Check On],0.594,0.133,29.0%,0.273,0.832,0.398
+Mistral-7B-Instruct-v0.3,MeanTokEnt,0.594,0.133,29.1%,0.274,0.831,0.399
+Mistral-7B-Instruct-v0.3,LogicalContradiction [Logic Check On],0.414,inf,100.0%,0.471,0.000,1.000
+Qwen3-4B-Instruct-2507,MaxSeqProb,0.678,0.001,41.4%,0.265,0.742,0.529
+Qwen3-4B-Instruct-2507,MaxSeqProb [Logic Check On],0.678,0.001,41.4%,0.265,0.742,0.529
+Qwen3-4B-Instruct-2507,Perplexity,0.677,1.000,41.4%,0.265,0.742,0.529
+Qwen3-4B-Instruct-2507,Perplexity [Logic Check On],0.677,1.000,41.4%,0.265,0.742,0.529
+Qwen3-4B-Instruct-2507,MeanTokEnt,0.676,0.003,41.3%,0.265,0.742,0.528
+Qwen3-4B-Instruct-2507,MeanTokEnt [Logic Check On],0.676,0.003,41.3%,0.265,0.742,0.528
+Qwen3-4B-Instruct-2507,Ensemble,0.662,0.411,46.4%,0.287,0.687,0.575
+Qwen3-4B-Instruct-2507,Ensemble [Logic Check On],0.658,0.416,47.1%,0.291,0.678,0.581
+Qwen3-4B-Instruct-2507,LogicalContradiction [Logic Check On],0.480,inf,100.0%,0.425,0.000,1.000
+gemma-3-12b-it,Ensemble [Logic Check On],0.610,0.433,40.2%,0.369,0.703,0.506
+gemma-3-12b-it,LogicalContradiction [Logic Check On],0.590,1.000,53.6%,0.415,0.555,0.626
+gemma-3-12b-it,Ensemble,0.526,0.493,70.5%,0.469,0.338,0.747
+gemma-3-12b-it,MaxSeqProb [Logic Check On],0.511,0.025,73.8%,0.471,0.304,0.780
+gemma-3-12b-it,MaxSeqProb,0.511,0.025,73.8%,0.471,0.305,0.780
+gemma-3-12b-it,MeanTokEnt [Logic Check On],0.510,0.066,74.5%,0.471,0.297,0.788
+gemma-3-12b-it,Perplexity [Logic Check On],0.510,1.013,74.1%,0.471,0.301,0.783
+gemma-3-12b-it,MeanTokEnt,0.510,0.061,74.1%,0.471,0.301,0.783
+gemma-3-12b-it,Perplexity,0.510,1.013,74.1%,0.471,0.301,0.783
