@@ -118,3 +118,20 @@ Since compute nodes often lack internet access and HuggingFace is set to offline
    ```bash
    sbatch download_models.slurm
    ```
+
+### Populating the Vector Database
+
+Before running experiments on the cluster, you must populate the vector DBs and sparse indices for your datasets by running the provided SLURM script:
+```bash
+sbatch scripts/utils/populate_db.sh scifact
+sbatch scripts/utils/populate_db.sh quantemp
+```
+
+### Starting Evaluation Runs
+
+After populating the databases, you can start the evaluation runs by submitting the job array scripts:
+```bash
+./start_run_scifact.sh
+./start_run_quantemp.sh
+./start_run_openai.sh
+```
