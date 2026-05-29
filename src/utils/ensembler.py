@@ -56,14 +56,12 @@ class UQEnsembler:
             "MaximumSequenceProbability",
             "Perplexity",
             "MeanTokenEntropy",
-            # "MeanConditionalPointwiseMutualInformation",
-            # "RenyiNeg",
         ]
 
-        # Conditionally inject the trap logic if the flag is enabled!
+        # Conditionally inject ACE if the flag is enabled!
         if self.check_logic:
             self.uq_methods_expected.append("LogicalContradiction")
-            print(f"🪤 Check logic flag detected ({self.logic_eval_method}): Including 'LogicalContradiction' in feature matrix.")
+            print(f"ACE flag detected ({self.logic_eval_method}): Including 'LogicalContradiction' in feature matrix.")
 
         # Internal state
         self.data_lines = []
@@ -189,7 +187,7 @@ class UQEnsembler:
         )
         final_clf.fit(X_raw_scaled, self.y_target)
 
-        # --- Coefficient-based weight representations ---
+        # Coefficient-based weight representations
         raw_weights = final_clf.coef_[0]
         feature_stds = final_scaler.scale_
         standardized_weights = raw_weights * feature_stds
@@ -201,7 +199,7 @@ class UQEnsembler:
         else:
             relative_importance = np.zeros_like(abs_std)
 
-        # --- SHAP-based importance ---
+        # SHAP-based importance
         print("🔍 Computing SHAP values...")
         explainer = shap.Explainer(final_clf, X_raw_scaled, feature_names=self.uq_methods_expected)
         explanation = explainer(X_raw_scaled)
@@ -212,7 +210,7 @@ class UQEnsembler:
         total_shap = float(mean_abs_shap.sum())
         shap_share = mean_abs_shap / total_shap if total_shap > 0 else np.zeros_like(mean_abs_shap)
 
-        # --- Build combined per-feature JSON dict ---
+        # Build combined per-feature JSON dict
         weights_dict = {}
         for j, feat in enumerate(self.uq_methods_expected):
             weights_dict[feat] = {
@@ -228,7 +226,7 @@ class UQEnsembler:
             json.dump(weights_dict, f, indent=2)
         print(f"✅ Feature weights JSON saved to: {self.weights_path.relative_to(ROOT_DIR)}")
 
-        # --- Global SHAP visualizations ---
+        # Global SHAP visualizations
         print("📊 Generating SHAP summary plots...")
         plot_dir = self.base_dir / "shap_plots"
         plot_dir.mkdir(parents=True, exist_ok=True)
@@ -256,7 +254,6 @@ class UQEnsembler:
         plt.close()
         print(f"   • Beeswarm plot: {beeswarm_path.relative_to(ROOT_DIR)}")
 
-        # --- Save model bundle ---
         model_bundle = {
             "scaler": final_scaler,
             "model": final_clf,
@@ -284,7 +281,6 @@ def main():
     parser.add_argument("--split", required=True)
     parser.add_argument("--model", required=True)
     
-    # Catching the newly passed arguments from batch_run.py!
     parser.add_argument("--check_logic", action="store_true", help="Whether to expect LogicalContradiction scores")
     parser.add_argument("--output_format", type=str, default="label_only", help="Format suffix of the target file")
     parser.add_argument("--logic_eval_method", type=str, choices=["discrete", "probabilistic"], default="discrete", help="Evaluation method for the logical contradiction")
@@ -297,7 +293,7 @@ def main():
         model_name=args.model,
         check_logic=args.check_logic,
         output_format=args.output_format,
-        logic_eval_method=args.logic_eval_method # Passed down to init here!
+        logic_eval_method=args.logic_eval_method
     )
     ensembler.execute_pipeline()
 

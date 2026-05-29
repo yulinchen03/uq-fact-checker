@@ -144,9 +144,6 @@ class GeminiLLMClient:
         Generates text using the Gemini API.
         """
         try:
-            # We explicitly override the small `max_new_tokens` (256) intended for local vLLM 
-            # because the genai API or the preview models appear to be treating it as 
-            # max total tokens (prompt + output) or hitting a related limit bug.
             max_new_tokens = 4096 
             
             # Disable safety filters as medical/political claims often trigger false positives
@@ -244,7 +241,7 @@ class OpenAILLMClient:
         Generates text using the OpenAI API.
         """
         try:
-            # --- Suffix Handling ---
+            # Suffix Handling
             # The verifier appends "\nVerdict:" or "\n```json\n" to prompts for
             # local text-completion style generation. For chat API models, we
             # strip these entirely — they are not needed in the chat format.
@@ -309,7 +306,7 @@ class OpenAILLMClient:
             except Exception:
                 decoded_output = ""
                 
-            # --- Output Sanitation ---
+            # Output Sanitation
             # OpenAI models commonly wrap structured outputs in markdown blocks.
             # This safely strips ```json, ```markdown, and the closing ```.
             if decoded_output.startswith("```"):

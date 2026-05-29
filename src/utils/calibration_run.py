@@ -18,7 +18,6 @@ load_dotenv()
 # Prevent memory fragmentation
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
-# --- Dynamic Pathing ---
 project_root = Path(__file__).resolve().parents[2]
 sys.path.append(str(project_root))
 
@@ -108,7 +107,7 @@ def main():
         enforce_eager=True
     )
 
-    # --- SHARED GENERATION CONFIG ---
+    # Shared generation config
     GEN_TEMPERATURE = 0.5 if cfg.uncertainty.method == "SemanticEntropy" else 0.0
     GEN_STOP_TOKENS = ["<|im_end|>", "<|eot_id|>", "```", "<|im_start|>", "<|start_header_id|>"]
 
@@ -165,26 +164,22 @@ def main():
     print(f"🎯 Output File: {out_file.relative_to(project_root)}")
     open(out_file, 'w').close()
 
-    # In calibration, we MUST compute all metrics to train the ensemble
-    # SemanticEntropy is included for standalone evaluation/calibration but is NOT an ensemble feature
     estimators = [
         "MaximumSequenceProbability",
         "Perplexity",
         "MeanTokenEntropy",
-        # "MeanConditionalPointwiseMutualInformation",
-        # "SemanticEntropy",
     ]
     
     uq_engine = UQVerifier(model=whitebox_model, estimator_name=estimators)
+    from src.modules.ace import AdversarialConsistencyEvaluator
+    ace = AdversarialConsistencyEvaluator(model=whitebox_model)
 
     print(f"🔄 Starting UQ metric generation across {len(dataset_items)} claims...")
     
     with open(out_file, "a") as f_out:
         for item in tqdm(dataset_items, desc="Generating Joint Methods UQ Scores"):
             try:
-                # ==========================================
-                # 1. EVALUATE ORIGINAL CLAIM (UNIVERSAL CALL)
-                # ==========================================
+                # 1. Evaluate original claim (Universal call)
                 final_clean, uq_scores, verdict, _, _, _, _ = uq_engine.verify_claim(
                     claim=item.claim,
                     prompt_template=parametric_prompt,
@@ -192,11 +187,10 @@ def main():
                     output_format=args.output_format
                 )
 
-                # ==========================================
-                # 2. EVALUATE NEGATED CLAIM (EPISTEMIC TRAP)
-                # ==========================================
+                # 2. Evaluate negated claim (ACE)
                 if args.check_logic:
-                    logic_score, extra_p, extra_r, extra_calls = uq_engine.check_logical_contradiction(
+                    logic_score, extra_p, extra_r, extra_calls = ace.check_logical_contradiction(
+                        uq_verifier=uq_engine,
                         claim=item.claim,
                         original_verdict=verdict,
                         original_uq_scores=uq_scores,

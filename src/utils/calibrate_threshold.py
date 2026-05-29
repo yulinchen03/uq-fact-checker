@@ -12,13 +12,8 @@ from pathlib import Path
 import hydra
 from omegaconf import DictConfig
 
-# Dynamic Path Resolution
 ROOT_DIR = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT_DIR))
-
-# ==========================================
-# SETUP & UTILITIES
-# ==========================================
 
 def lock_random_seeds(seed: int = 42):
     """Locks all random number generators for deterministic pipeline execution."""
@@ -91,13 +86,13 @@ def plot_calibration_curves(fpr, tpr, auroc, best_fpr, best_tpr,
     """
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 
-    # --- Descriptive Super Title ---
+    # Descriptive Super Title
     trap_str = f"ON ({logic_eval_method})" if check_logic else "OFF"
     config_desc = f"Format: {output_format} | Logic Check: {trap_str}"
     fig.suptitle(f"Calibration Analysis: {uq_method} ({dataset_name.capitalize()})\n[{config_desc}]", 
                  fontsize=14, fontweight='bold', y=1.05)
 
-    # ---- Panel 1: ROC Curve ----
+    # Panel 1: ROC Curve
     ax1.plot(fpr, tpr, color='#2563eb', linewidth=2, label=f'{uq_method} (AUROC: {auroc:.4f})')
     ax1.plot([0, 1], [0, 1], 'k--', alpha=0.4, label='Random Chance')
     ax1.scatter([best_fpr], [best_tpr], color='red', s=80, zorder=5,
@@ -110,7 +105,7 @@ def plot_calibration_curves(fpr, tpr, auroc, best_fpr, best_tpr,
     ax1.set_xlim([-0.02, 1.02])
     ax1.set_ylim([-0.02, 1.02])
 
-    # ---- Panel 2: Risk-Coverage Curve ----
+    # Panel 2: Risk-Coverage Curve
     sorted_idx = np.argsort(coverages)
     sorted_cov = coverages[sorted_idx]
     sorted_risk = risks[sorted_idx]
@@ -127,7 +122,7 @@ def plot_calibration_curves(fpr, tpr, auroc, best_fpr, best_tpr,
 
     plt.tight_layout()
     
-    # --- Dynamic filename based on config ---
+    # Dynamic filename based on config
     logic_suffix = f"_logic_{logic_eval_method}" if check_logic else "_logic_OFF"
     filename = f"calibration_curves_{output_format}{logic_suffix}.png"
     plot_path = Path(save_dir) / filename
@@ -138,9 +133,7 @@ def plot_calibration_curves(fpr, tpr, auroc, best_fpr, best_tpr,
     print(f"\n📈 Calibration curves saved to: {plot_path.relative_to(ROOT_DIR)}")
 
 
-# ==========================================
-# THRESHOLD SWEEP CALIBRATION
-# ==========================================
+# Threshold Sweep Calibration
 
 def sweep_threshold(file_path, dataset_name, uq_method, save_dir=None, output_format="label_only", check_logic=False, logic_eval_method="discrete"):
     """
@@ -236,9 +229,7 @@ def sweep_threshold(file_path, dataset_name, uq_method, save_dir=None, output_fo
 
     return optimal_threshold, best_sensitivity, best_specificity, best_j, auroc, coverage, risk, guaranteed_risk, flag_rate
 
-# ==========================================
-# MAIN EXECUTION
-# ==========================================
+# Main Execution
 
 def parse_args():
     import argparse
@@ -304,7 +295,7 @@ def main():
         print("❌ Error: Valid UQ scores not found in the JSONL file.")
         return
 
-    # ===== AUROC-OPTIMAL =====
+    # AUROC-Optimal
     print(f"\n{'─'*40}")
     print(f"📐 Computing AUROC-Optimal Thresholds")
     print(f"{'─'*40}")
@@ -341,7 +332,7 @@ def main():
         else:
             print(f"❌ Threshold sweep failed for {uq_method}.")
 
-    # --- Save aggregated pack with the fully defined suffix so test configs don't overlap! ---
+    # Save aggregated pack with the fully defined suffix so test configs don't overlap!
     save_path = base_dir / f"optimal_thresholds_{split}_{args.output_format}_{logic_str}.json"
     with open(save_path, 'w') as f:
         json.dump(optimal_thresholds_pack, f, indent=4)

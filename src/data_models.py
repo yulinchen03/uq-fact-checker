@@ -36,7 +36,7 @@ class FactCheckSample(BaseModel):
     explanation: Optional[str] = None
     metrics: FactCheckMetrics = Field(default_factory=FactCheckMetrics)
 
-    # --- UQ SPECIFIC FIELDS ---
+    # UQ Specific Fields
     uncertainty_score: Optional[float] = None
     uq_scores: Dict[str, float] = Field(default_factory=dict)
     parametric_response: Optional[str] = None
@@ -44,6 +44,6 @@ class FactCheckSample(BaseModel):
     uq_flagged: bool = False
     rag_prediction: Optional[str] = None
 
-    # --- GRANULAR SPECIFIC FIELDS ---
+    # Granular Specific Fields
     atomic_facts: List[str] = Field(default_factory=list)
     atomic_verdicts: List[Dict[str, Any]] = Field(default_factory=list)

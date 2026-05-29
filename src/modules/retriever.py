@@ -204,9 +204,7 @@ class GoldRetriever(BaseRetriever):
         return sample
 
 
-# ---------------------------------------------------------------------------
 # Qwen3 Reranker Helper
-# ---------------------------------------------------------------------------
 # The Qwen3 reranker is a GENERATIVE model, not a standard cross-encoder.
 # It must NOT be loaded with AutoModelForSequenceClassification or via the
 # sentence-transformers CrossEncoder API — both will produce garbage scores.
@@ -356,9 +354,7 @@ class QwenReranker:
         return sorted(documents, key=lambda d: d.score, reverse=True)
 
 
-# ---------------------------------------------------------------------------
-# HybridRetriever  (dense + sparse  →  RRF  →  Qwen3 reranker)
-# ---------------------------------------------------------------------------
+# HybridRetriever (dense + sparse -> RRF -> Qwen3 reranker)
 
 class HybridRetriever(BaseRetriever):
     def __init__(
@@ -407,7 +403,7 @@ class HybridRetriever(BaseRetriever):
         self.collection_name = f"{dataset_name}_{combined_name}_docs"
         sparse_index_path = os.path.join(self.db_path, "sparse_index.pkl")
 
-        # ── 1. Load Encoding Engine ─────────────────────────────────────
+        # 1. Load Encoding Engine
         if self.model_type == "bgem3":
             from FlagEmbedding import BGEM3FlagModel
             logger.info(f"Loading Unified Encoder (BGE-M3) on {device}...")
@@ -420,7 +416,7 @@ class HybridRetriever(BaseRetriever):
         else:
             raise ValueError(f"Unknown model_type: {self.model_type}")
 
-        # ── 2. Initialize Chroma & Pickled Indexes ──────────────────────
+        # 2. Initialize Chroma & Pickled Indexes
         logger.info(f"Connecting to ChromaDB at {self.db_path}...")
         self.client = chromadb.PersistentClient(path=self.db_path)
         try:
@@ -434,7 +430,7 @@ class HybridRetriever(BaseRetriever):
             self.inverted_index = pickle.load(f)
         logger.info(f"✅ Sparse index loaded: {len(self.inverted_index)} unique tokens")
 
-        # ── 3. Initialize Reranker ──────────────────────────────────────
+        # 3. Initialize Reranker
         if self.use_reranker:
             self.reranker = QwenReranker(
                 model_name=reranker_model,
@@ -448,7 +444,7 @@ class HybridRetriever(BaseRetriever):
 
         logger.info("✅ HybridRetriever initialized.")
 
-    # ── Internal retrieval helpers ──────────────────────────────────────
+    # Internal retrieval helpers
 
     def _get_dense_results(self, query_dense_vec: list) -> List[Tuple[str, float]]:
         results = self.collection.query(

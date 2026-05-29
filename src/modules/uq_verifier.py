@@ -101,57 +101,6 @@ class VLLMGreedyLMProbsCalculator(StatCalculator):
         return {"greedy_lm_log_likelihoods": lm_log_likelihoods}
 
 
-class PMI(Estimator):
-    """Custom clone of LM-Polygraph's PMI that does not drop the first token."""
-
-    def __init__(self):
-        super().__init__(["greedy_log_likelihoods", "greedy_lm_log_likelihoods"], "sequence")
-
-    def __str__(self):
-        return "PMI"
-
-    def __call__(self, stats: dict) -> np.ndarray:
-        cond_logprobs = stats["greedy_log_likelihoods"]
-        uncond_logprobs = stats["greedy_lm_log_likelihoods"]
-        scores = []
-        for c_lp, u_lp in zip(cond_logprobs, uncond_logprobs):
-            seq_pmi = []
-            for c_val, u_val in zip(c_lp, u_lp):
-                seq_pmi.append(c_val - u_val)
-            # Average PMI across tokens; flip sign so higher = more uncertain
-            scores.append(-np.mean(seq_pmi))
-        return np.array(scores)
-
-
-class CPMI(Estimator):
-    """Custom clone of LM-Polygraph's CPMI that does not drop the first token."""
-
-    def __init__(self, tau: float = 0.0656, lambd: float = 3.599):
-        super().__init__(["greedy_log_likelihoods", "greedy_lm_log_likelihoods", "entropy"], "sequence")
-        self.tau = tau
-        self.lambd = lambd
-
-    def __str__(self):
-        return "CPMI"
-
-    def __call__(self, stats: dict) -> np.ndarray:
-        cond = stats["greedy_log_likelihoods"]
-        uncond = stats["greedy_lm_log_likelihoods"]
-        entropies = stats["entropy"]
-        scores = []
-        for c_lp, u_lp, ent in zip(cond, uncond, entropies):
-            seq_cpmi = []
-            for c_val, u_val, e_val in zip(c_lp, u_lp, ent):
-                score = c_val
-                # Apply unconditional penalty if entropy exceeds threshold
-                if e_val >= self.tau:
-                    score -= self.lambd * u_val
-                seq_cpmi.append(score)
-            # Average and flip sign
-            scores.append(-np.mean(seq_cpmi))
-        return np.array(scores)
-
-
 class UQEstimator(ABC):
     @abstractmethod
     def estimate(self, full_prompt: str):
@@ -280,84 +229,7 @@ class UQVerifier(UQEstimator):
         else:
             return fallback_json, float("inf")
 
-    def generate_negation(self, claim: str) -> str:
-        system_prompt = (
-            "Negate the core factual premise of the claim"
-            "by inverting its logical meaning while preserving"
-            "the original grammatical structure. Output EXACTLY"
-            "ONE SENTENCE. No explanations, no quotes, no conversational filler."
-        )
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Claim: {claim}"}
-        ]
-        llm_engine = self.model.model
-        tokenizer = llm_engine.get_tokenizer()
 
-        try:
-            prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        except Exception:
-            prompt = f"{system_prompt}\n\nClaim: {claim}\nResponse:"
-        prompt += "Negated Claim:"
-
-        prompt_tokens_count = len(tokenizer.encode(prompt))
-        neg_sampling_params = SamplingParams(
-            temperature=0.1,
-            max_tokens=64,
-            stop=["<|im_end|>", "<|eot_id|>", "\n"]
-        )
-        outputs = llm_engine.generate([prompt], sampling_params=neg_sampling_params, use_tqdm=False)
-        negated_text = outputs[0].outputs[0].text.strip()
-
-        response_tokens_count = len(outputs[0].outputs[0].token_ids)
-        if negated_text.startswith(" "):
-            negated_text = negated_text[1:]
-        return negated_text, prompt_tokens_count, response_tokens_count
-
-    def check_logical_contradiction(
-        self, claim: str, original_verdict: str, original_uq_scores: dict,
-        parametric_prompt: str, dataset_name: str, eval_method: str = "discrete",
-        output_format: str = "label_only"
-    ) -> tuple[float, int, int, int]:
-        """Adversarial consistency evaluation: generates a negated claim and checks for logical contradiction."""
-        import re
-
-        negated_claim, neg_p_tokens, neg_r_tokens = self.generate_negation(claim)
-
-        # Temporarily disable UQ estimation for the negated claim pass
-        orig_lm_estimators = self.lm_polygraph_estimators
-        orig_estimators = self.estimator_names
-        orig_semantic = getattr(self, "requires_semantic", False)
-
-        self.lm_polygraph_estimators = []
-        self.estimator_names = []
-        self.requires_semantic = False
-
-        _, _, negated_verdict, _, inner_p_tokens, inner_r_tokens, inner_llm_calls = self.verify_claim(
-            claim=negated_claim,
-            prompt_template=parametric_prompt,
-            dataset_name=dataset_name,
-            output_format=output_format
-        )
-
-        self.lm_polygraph_estimators = orig_lm_estimators
-        self.estimator_names = orig_estimators
-        self.requires_semantic = orig_semantic
-        
-        # Adversarial consistency evaluation (ACE)
-        logic_score = 0.0
-        if eval_method == "discrete":
-            if original_verdict == negated_verdict and original_verdict in ["SUPPORT", "CONTRADICT", "True", "False"]:
-                logic_score = 1.0
-        elif eval_method == "probabilistic":
-            # Fluri et al.'s approach — not implemented for ACE; using discrete version instead.
-            pass
-
-        extra_p_tokens = neg_p_tokens + inner_p_tokens
-        extra_r_tokens = neg_r_tokens + inner_r_tokens
-        extra_llm_calls = 1 + inner_llm_calls
-
-        return logic_score, extra_p_tokens, extra_r_tokens, extra_llm_calls
 
     def verify_claim(self, claim: str, prompt_template: str, dataset_name: str,
                      output_format: str, primary_estimator: str = None, ensemble_bundle: dict = None):
@@ -443,7 +315,10 @@ class UQVerifier(UQEstimator):
         is_ensemble_feature = (primary_estimator == "Ensemble" and ensemble_bundle and "LogicalContradiction" in ensemble_bundle.get("features", []))
 
         if is_primary or is_ensemble_feature:
-            logic_score, extra_p, extra_r, extra_calls = self.check_logical_contradiction(
+            from src.modules.ace import AdversarialConsistencyEvaluator
+            ace_evaluator = AdversarialConsistencyEvaluator(self.model)
+            logic_score, extra_p, extra_r, extra_calls = ace_evaluator.check_logical_contradiction(
+                uq_verifier=self,
                 claim=claim,
                 original_verdict=verdict,
                 original_uq_scores=uq_scores,
