@@ -654,7 +654,7 @@ def main():
     # Resolve project root (two levels up from scripts/visualization/)
     PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-    unified_tables_dir = PROJECT_ROOT / "vis" / "unified_tables"
+    unified_tables_dir = PROJECT_ROOT / "visualizations" / "unified_tables"
     unified_tables_dir.mkdir(parents=True, exist_ok=True)
     
     all_table1_records = []
@@ -666,7 +666,7 @@ def main():
         for model in models:
             print(f"  Processing model: {model}")
             target_dir = PROJECT_ROOT / "results_dump" / "final_2" / dataset / model
-            out_dir = PROJECT_ROOT / "vis" / dataset / model
+            out_dir = PROJECT_ROOT / "visualizations" / dataset / model
             out_dir.mkdir(parents=True, exist_ok=True)
             
             print(f"Scanning {target_dir} for data...")

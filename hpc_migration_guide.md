@@ -17,7 +17,7 @@ Use `rsync` from your local machine to sync the repository to the cluster, exclu
 ```bash
 rsync -avz --progress --no-perms --no-owner --no-group \
     --exclude='.venv' --exclude='outputs' --exclude='.git' \
-    --exclude='QuanTemp' --exclude='vis' \
+    --exclude='QuanTemp' --exclude='visualizations' \
     --exclude=results_dump \
     --exclude='data/vector_db' --exclude='data/quantemp/corpus.json' \
     --exclude='data/scifact/cross_validation' --exclude='results' \
@@ -51,7 +51,7 @@ scp thesis_base.sif <username>@<cluster_address>:<path_to_project_root>/apptaine
 
 ---
 
-## 3. Interactive Run (Debugging & Development)
+## 3. Interactive Run (For Debugging)
 
 For debugging and short tests, start an interactive SLURM session and enter the Apptainer shell.
 
@@ -86,7 +86,7 @@ uv pip install <your-missing-dependency>
 
 ---
 
-## 4. Slurm Batch Run (Production)
+## 4. Slurm Batch Run (Automated)
 
 For long-running evaluation scripts, submit jobs to the SLURM queue.
 

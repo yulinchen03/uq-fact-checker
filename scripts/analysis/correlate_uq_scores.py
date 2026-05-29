@@ -235,7 +235,7 @@ def main():
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="vis/uq_correlations",
+        default="visualizations/uq_correlations",
         help="Output directory for plots and CSV",
     )
     parser.add_argument(
@@ -302,7 +302,7 @@ def main():
             f"{dataset} · {model} · {config_label}"
         )
 
-        save_dir = Path("vis/uq_correlations")
+        save_dir = Path("visualizations/uq_correlations")
         plot_path = (
             ROOT_DIR / save_dir / dataset / model / f"correlation_heatmap_{config_label}.png"
         )

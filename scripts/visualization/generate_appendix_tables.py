@@ -135,7 +135,7 @@ def generate_latex_table_per_model(df, model_name, display_name):
     return "\n".join(latex)
 
 def main():
-    csv_path = 'vis/unified_tables/Table2_End_to_End_Efficiency_unified.csv'
+    csv_path = 'visualizations/unified_tables/Table2_End_to_End_Efficiency_unified.csv'
     df = pd.read_csv(csv_path)
     
     models = [

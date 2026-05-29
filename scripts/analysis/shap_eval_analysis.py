@@ -272,7 +272,7 @@ def main():
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="vis/shap_eval",
+        default="visualizations/shap_eval",
         help="Output directory for SHAP plots and JSON summaries",
     )
     args = parser.parse_args()
