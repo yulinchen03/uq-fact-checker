@@ -106,7 +106,7 @@ def get_experiment_config():
     return inquirer.prompt(questions)
 
 
-@hydra.main(version_base=None, config_path="config", config_name="config")
+@hydra.main(version_base=None, config_path="../config", config_name="config")
 def main(cfg: DictConfig):
     lock_random_seeds(42)
     

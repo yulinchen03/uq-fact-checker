@@ -160,7 +160,7 @@ outputs
 data/quantemp/corpus.json 
 *.sif
 tests
-results/archives
 results_dump/
 openai_results/
 decomp_exp/
+run_results/

@@ -12,14 +12,14 @@ fi
 echo "📋 Found $NUM_CALIB calibration jobs and $NUM_EVAL evaluation jobs."
 
 # 2. Submit Calibration Array
-echo "⏳ Submitting Calibration Array Job..."
-CALIB_ID=$(sbatch --parsable --array=1-$NUM_CALIB scripts/utils/submit_calib_jobs_quantemp.sh)
-echo "✅ Calibration Array Queued with ID: $CALIB_ID"
+# echo "⏳ Submitting Calibration Array Job..."
+# CALIB_ID=$(sbatch --parsable --array=1-$NUM_CALIB scripts/utils/submit_calib_jobs_quantemp.sh)
+# echo "✅ Calibration Array Queued with ID: $CALIB_ID"
 
 # 3. Submit Evaluation Array with Dependency
 echo "⏳ Submitting Evaluation Array Job..."
-ARRAY_ID=$(sbatch --parsable --dependency=afterok:$CALIB_ID --array=1-$NUM_EVAL scripts/utils/submit_eval_jobs_quantemp.sh)
-# ARRAY_ID=$(sbatch --parsable --array=1-$NUM_EVAL scripts/utils/submit_eval_jobs_quantemp.sh)
+# ARRAY_ID=$(sbatch --parsable --dependency=afterok:$CALIB_ID --array=1-$NUM_EVAL scripts/utils/submit_eval_jobs_quantemp.sh)
+ARRAY_ID=$(sbatch --parsable --array=1-$NUM_EVAL scripts/utils/submit_eval_jobs_quantemp.sh)
 echo "✅ Evaluation Array Queued with ID: $ARRAY_ID (Waiting for $CALIB_ID to finish)"
 
 echo ""
