@@ -1,10 +1,12 @@
 import os
+import glob
 import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from pathlib import Path
+from collections import defaultdict
 from sklearn.metrics import roc_curve, auc
 
 def load_json(filepath):
@@ -151,6 +153,80 @@ def extract_uq_jsonl_data(base_dir):
             
     return uq_data
 
+
+def discover_final_runs(project_root):
+    """Finds all results_dump/final_* directories, sorted numerically."""
+    results_dump = project_root / "results_dump"
+    runs = sorted(
+        [d for d in results_dump.iterdir() if d.is_dir() and d.name.startswith("final")],
+        key=lambda p: p.name
+    )
+    print(f"Discovered {len(runs)} final runs: {[r.name for r in runs]}")
+    return runs
+
+
+def _make_record_key(record):
+    """Creates a unique key to align the same method across runs."""
+    return (record['Method_Raw'], record['Mode'], record['Logic_ON'])
+
+
+NUMERIC_FIELDS = [
+    'Balanced_Accuracy', 'AUROC', 'Latency_Sec', 'LLM_Calls',
+    'Retrieval_Calls', 'Dec_Input', 'Dec_Output', 'UQ_Input',
+    'UQ_Output', 'Gen_Input', 'Gen_Output', 'Flag_Rate'
+]
+
+
+def average_records_across_runs(all_run_records):
+    """Averages numeric metrics across parallel runs, keyed by method.
+
+    Args:
+        all_run_records: list of lists, each inner list is the output of
+                         extract_experiment_data for one run (with Flag_Rate injected).
+
+    Returns:
+        List of averaged record dicts, with added '_std' fields for each numeric metric.
+    """
+    grouped = defaultdict(list)
+    for run_records in all_run_records:
+        for r in run_records:
+            key = _make_record_key(r)
+            grouped[key].append(r)
+
+    averaged = []
+    for key, records_list in grouped.items():
+        base = dict(records_list[0])  # copy non-numeric fields from first run
+
+        for field in NUMERIC_FIELDS:
+            vals = [r.get(field) for r in records_list if r.get(field) is not None]
+            if vals:
+                base[field] = float(np.mean(vals))
+                base[f'{field}_std'] = float(np.std(vals))
+                base[f'{field}_min'] = float(np.min(vals))
+                base[f'{field}_max'] = float(np.max(vals))
+            else:
+                base[field] = None
+                base[f'{field}_std'] = None
+                base[f'{field}_min'] = None
+                base[f'{field}_max'] = None
+
+        base['n_runs'] = len(records_list)
+        averaged.append(base)
+
+    # Preserve original sort order
+    def sort_key(r):
+        if r['Mode'] == 'never_retrieve': return (0, "")
+        if r['Mode'] in ['uq_decompose', 'uq_aware']:
+            b = r['Display_Name'].split('\n')[0]
+            lv = 1 if r['Logic_ON'] else 0
+            return (1, f"{b}_{lv}")
+        if r['Mode'] == 'granular': return (2, "")
+        if r['Mode'] == 'always_retrieve': return (3, "")
+        return (4, "")
+
+    averaged.sort(key=lambda x: (sort_key(x)[0], sort_key(x)[1]))
+    return averaged
+
 # ==========================================
 # TABLE EXPORT (NEW)
 # ==========================================
@@ -224,26 +300,61 @@ def extract_calibration_data(base_dir, dataset_name, model_name):
     print(f"  [Debug] Successfully extracted {len(calib_records)} calibration records from Markdown for {model_name}.")
     return calib_records
 
+def _fmt_mean_std(mean_val, std_val, fmt=".3f", suffix="", as_pct=False):
+    """Formats a value as 'mean ± std' if std is available, else just 'mean'."""
+    if mean_val is None or (isinstance(mean_val, float) and np.isnan(mean_val)):
+        return "N/A"
+    if as_pct:
+        mean_s = f"{mean_val * 100:{fmt}}%"
+        if std_val is not None and not np.isnan(std_val):
+            std_s = f"{std_val * 100:{fmt}}%"
+            return f"{mean_s} ± {std_s}"
+        return mean_s
+    mean_s = f"{mean_val:{fmt}}{suffix}"
+    if std_val is not None and not np.isnan(std_val):
+        std_s = f"{std_val:{fmt}}{suffix}"
+        return f"{mean_s} ± {std_s}"
+    return mean_s
+
+
 def export_summary_tables(records, tables_out_dir, dataset_name, model_name):
-    """Generates CSV and Markdown score tables for paper reporting in a unified folder."""
+    """Generates CSV and Markdown score tables for paper reporting in a unified folder.
+
+    When records contain '_std' fields (from multi-run averaging), values are
+    formatted as 'mean ± std' for stability reporting.
+    """
     if not records:
         return None, None
 
     df = pd.DataFrame(records)
-    
-    # Calculate Total Tokens
+    multi_run = 'Balanced_Accuracy_std' in df.columns
+    n_runs = int(df['n_runs'].iloc[0]) if 'n_runs' in df.columns else 1
+
+    # Calculate Total Tokens (mean)
     df['Total_Tokens'] = (df['Dec_Input'] + df['Dec_Output'] + 
                           df['UQ_Input'] + df['UQ_Output'] + 
                           df['Gen_Input'] + df['Gen_Output'])
-    
+    if multi_run:
+        # Propagate std via sum of independent stds (quadrature)
+        token_std_fields = ['Dec_Input_std', 'Dec_Output_std', 'UQ_Input_std',
+                            'UQ_Output_std', 'Gen_Input_std', 'Gen_Output_std']
+        df['Total_Tokens_std'] = np.sqrt(sum(df[f].fillna(0)**2 for f in token_std_fields))
+
     # Clean up Display Names for tables (remove newlines)
     df['Method'] = df['Display_Name'].apply(lambda x: x.replace('\n', ' '))
 
-    # Format Flag Rate dynamically
+    # Format Flag Rate dynamically (with ± std if available)
     if 'Flag_Rate' in df.columns:
-        df['Flag_Rate_Fmt'] = df['Flag_Rate'].apply(lambda x: f"{x * 100:.1f}%" if pd.notnull(x) else "N/A")
+        if multi_run:
+            df['Flag_Rate_Fmt'] = df.apply(
+                lambda r: _fmt_mean_std(r['Flag_Rate'], r.get('Flag_Rate_std'), fmt=".1f", as_pct=True)
+                if pd.notnull(r['Flag_Rate']) else "N/A", axis=1)
+        else:
+            df['Flag_Rate_Fmt'] = df['Flag_Rate'].apply(lambda x: f"{x * 100:.1f}%" if pd.notnull(x) else "N/A")
     else:
         df['Flag_Rate_Fmt'] = "N/A"
+
+    run_tag = f" (n={n_runs} runs)" if multi_run else ""
 
     # ---------------------------------------------------------
     # TABLE 1: UQ Performance (AUROC) & Flag Rate
@@ -251,23 +362,50 @@ def export_summary_tables(records, tables_out_dir, dataset_name, model_name):
     table1 = None
     uq_df = df[df['AUROC'].notnull()].copy()
     if not uq_df.empty:
-        cols_table1 = ['Method', 'AUROC', 'Flag_Rate_Fmt']
-        table1 = uq_df[cols_table1].rename(columns={'Flag_Rate_Fmt': 'Flag Rate'}).sort_values(by='AUROC', ascending=False)
+        if multi_run:
+            uq_df['AUROC_Fmt'] = uq_df.apply(
+                lambda r: _fmt_mean_std(r['AUROC'], r.get('AUROC_std')), axis=1)
+            cols_table1 = ['Method', 'AUROC_Fmt', 'Flag_Rate_Fmt']
+            table1 = uq_df[cols_table1].rename(columns={'AUROC_Fmt': 'AUROC', 'Flag_Rate_Fmt': 'Flag Rate'})
+        else:
+            cols_table1 = ['Method', 'AUROC', 'Flag_Rate_Fmt']
+            table1 = uq_df[cols_table1].rename(columns={'Flag_Rate_Fmt': 'Flag Rate'})
+        
+        table1 = table1.sort_values(by='AUROC', ascending=False)
         table1.insert(0, 'Model', model_name)
         table1.insert(0, 'Dataset', dataset_name)
         
         print("\n" + "="*60)
-        print(f"TABLE 1: UQ Performance & Flag Rate | {dataset_name.capitalize()} | {model_name}")
+        print(f"TABLE 1: UQ Performance & Flag Rate{run_tag} | {dataset_name.capitalize()} | {model_name}")
         print("="*60)
         print(table1.drop(columns=['Dataset', 'Model']).to_markdown(index=False, floatfmt=".3f"))
 
     # ---------------------------------------------------------
     # TABLE 2: End-to-End Performance & Efficiency
     # ---------------------------------------------------------
-    cols_to_keep = ['Method', 'Balanced_Accuracy', 'Flag_Rate_Fmt', 'Total_Tokens', 'LLM_Calls', 'Retrieval_Calls', 'Latency_Sec']
-    table2 = df[cols_to_keep].copy()
-    table2.rename(columns={'Flag_Rate_Fmt': 'Flag Rate'}, inplace=True)
-    
+    if multi_run:
+        df['Bal_Acc_Fmt'] = df.apply(lambda r: _fmt_mean_std(r['Balanced_Accuracy'], r.get('Balanced_Accuracy_std')), axis=1)
+        df['LLM_Calls_Fmt'] = df.apply(lambda r: _fmt_mean_std(r['LLM_Calls'], r.get('LLM_Calls_std'), fmt=".2f"), axis=1)
+        df['Ret_Calls_Fmt'] = df.apply(lambda r: _fmt_mean_std(r['Retrieval_Calls'], r.get('Retrieval_Calls_std'), fmt=".2f"), axis=1)
+        df['Latency_Fmt'] = df.apply(lambda r: _fmt_mean_std(r['Latency_Sec'], r.get('Latency_Sec_std'), fmt=".2f", suffix="s"), axis=1)
+        df['Tokens_Fmt'] = df.apply(lambda r: _fmt_mean_std(r['Total_Tokens'], r.get('Total_Tokens_std'), fmt=".0f"), axis=1)
+
+        cols_to_keep = ['Method', 'Bal_Acc_Fmt', 'Flag_Rate_Fmt', 'Tokens_Fmt', 'LLM_Calls_Fmt', 'Ret_Calls_Fmt', 'Latency_Fmt']
+        table2 = df[cols_to_keep].copy()
+        table2.rename(columns={
+            'Bal_Acc_Fmt': 'Balanced_Accuracy', 'Flag_Rate_Fmt': 'Flag Rate',
+            'Tokens_Fmt': 'Total_Tokens', 'LLM_Calls_Fmt': 'LLM_Calls',
+            'Ret_Calls_Fmt': 'Retrieval_Calls', 'Latency_Fmt': 'Latency_Sec'
+        }, inplace=True)
+    else:
+        cols_to_keep = ['Method', 'Balanced_Accuracy', 'Flag_Rate_Fmt', 'Total_Tokens', 'LLM_Calls', 'Retrieval_Calls', 'Latency_Sec']
+        table2 = df[cols_to_keep].copy()
+        table2.rename(columns={'Flag_Rate_Fmt': 'Flag Rate'}, inplace=True)
+        table2['Balanced_Accuracy'] = table2['Balanced_Accuracy'].apply(lambda x: f"{x:.3f}")
+        table2['LLM_Calls'] = table2['LLM_Calls'].apply(lambda x: f"{x:.2f}")
+        table2['Retrieval_Calls'] = table2['Retrieval_Calls'].apply(lambda x: f"{x:.2f}")
+        table2['Latency_Sec'] = table2['Latency_Sec'].apply(lambda x: f"{x:.2f}s")
+
     table2['Sort_Rank'] = df['Mode'].map({
         'never_retrieve': 0,
         'always_retrieve': 1,
@@ -276,17 +414,11 @@ def export_summary_tables(records, tables_out_dir, dataset_name, model_name):
     })
     table2 = table2.sort_values(by=['Sort_Rank', 'Balanced_Accuracy'], ascending=[True, False]).drop(columns=['Sort_Rank'])
     
-    # Formatting for aesthetics
-    table2['Balanced_Accuracy'] = table2['Balanced_Accuracy'].apply(lambda x: f"{x:.3f}")
-    table2['LLM_Calls'] = table2['LLM_Calls'].apply(lambda x: f"{x:.2f}")
-    table2['Retrieval_Calls'] = table2['Retrieval_Calls'].apply(lambda x: f"{x:.2f}")
-    table2['Latency_Sec'] = table2['Latency_Sec'].apply(lambda x: f"{x:.2f}s")
-    
     table2.insert(0, 'Model', model_name)
     table2.insert(0, 'Dataset', dataset_name)
 
     print("\n" + "="*95)
-    print(f"TABLE 2: End-to-End Performance & Efficiency | {dataset_name.capitalize()} | {model_name}")
+    print(f"TABLE 2: End-to-End Performance & Efficiency{run_tag} | {dataset_name.capitalize()} | {model_name}")
     print("="*95)
     print(table2.drop(columns=['Dataset', 'Model']).to_markdown(index=False))
     print("\n")
@@ -647,12 +779,38 @@ def generate_uq_routing_accuracy_plot(uq_data, save_path):
 # EXECUTION
 # ==========================================
 
+def _inject_flag_rates(records, uq_data):
+    """Injects Flag_Rate into records based on UQ JSONL data."""
+    for r in records:
+        d_name = r['Display_Name']
+        if d_name in uq_data and len(uq_data[d_name]) > 0:
+            flag_count = sum(1 for c in uq_data[d_name] if c['uq_flagged'])
+            r['Flag_Rate'] = flag_count / len(uq_data[d_name])
+        else:
+            if r['Mode'] == 'always_retrieve':
+                r['Flag_Rate'] = 1.0
+            elif r['Mode'] in ['never_retrieve', 'granular']:
+                r['Flag_Rate'] = 0.0
+            else:
+                r['Flag_Rate'] = np.nan
+
+
 def main():
     datasets = ["quantemp", "scifact"]
-    models = ["Llama-3.1-8B-Instruct", "Qwen3-4B-Instruct-2507", "Mistral-7B-Instruct-v0.3", "gemma-3-12b-it"]
+    models = ["Llama-3.1-8B-Instruct", "Qwen3-4B-Instruct-2507", "Mistral-7B-Instruct-v0.3"]
 
     # Resolve project root (two levels up from scripts/visualization/)
     PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+    # Discover all final_* run directories
+    final_runs = discover_final_runs(PROJECT_ROOT)
+    if not final_runs:
+        print("ERROR: No final_* directories found under results_dump/. Exiting.")
+        return
+
+    # Filter to runs that actually contain data (non-empty)
+    valid_runs = [r for r in final_runs if any(r.iterdir())]
+    print(f"Using {len(valid_runs)} non-empty runs: {[r.name for r in valid_runs]}")
 
     unified_tables_dir = PROJECT_ROOT / "visualizations" / "unified_tables"
     unified_tables_dir.mkdir(parents=True, exist_ok=True)
@@ -665,73 +823,85 @@ def main():
         print(f"\nProcessing dataset: {dataset}")
         for model in models:
             print(f"  Processing model: {model}")
-            target_dir = PROJECT_ROOT / "results_dump" / "final_2" / dataset / model
             out_dir = PROJECT_ROOT / "visualizations" / dataset / model
             out_dir.mkdir(parents=True, exist_ok=True)
-            
-            print(f"Scanning {target_dir} for data...")
-            records = extract_experiment_data(target_dir)
-            uq_data = extract_uq_jsonl_data(target_dir)
 
-            # ---> INJECT DYNAMIC FLAG RATE INTO RECORDS HERE
-            for r in records:
-                d_name = r['Display_Name']
-                # Compute it directly from the parsed test JSONL responses if available
-                if d_name in uq_data and len(uq_data[d_name]) > 0:
-                    flag_count = sum(1 for c in uq_data[d_name] if c['uq_flagged'])
-                    r['Flag_Rate'] = flag_count / len(uq_data[d_name])
-                else:
-                    # Handle baselines that don't generate UQ data
-                    if r['Mode'] == 'always_retrieve':
-                        r['Flag_Rate'] = 1.0
-                    elif r['Mode'] in ['never_retrieve', 'granular']:
-                        r['Flag_Rate'] = 0.0
-                    else:
-                        r['Flag_Rate'] = np.nan
+            # --- Collect records from each run ---
+            all_run_records = []
+            first_run_uq_data = None  # For plots (use first run as representative)
+            first_run_records = None
 
-            calib_records = extract_calibration_data(target_dir, dataset, model)
-            all_calib_records.extend(calib_records)
-        
-            if not records:
-                print("No summary records found. Check the path!")
+            for run_dir in valid_runs:
+                target_dir = run_dir / dataset / model
+                if not target_dir.exists():
+                    print(f"    [Skip] {run_dir.name}/{dataset}/{model} does not exist.")
+                    continue
+
+                print(f"    Scanning {run_dir.name}/{dataset}/{model}...")
+                records = extract_experiment_data(target_dir)
+                uq_data = extract_uq_jsonl_data(target_dir)
+                _inject_flag_rates(records, uq_data)
+
+                if records:
+                    all_run_records.append(records)
+
+                # Keep first valid run's data for plots
+                if first_run_records is None and records:
+                    first_run_records = records
+                    first_run_uq_data = uq_data
+
+                # Calibration data (use first run only — calibration doesn't vary across runs)
+                if not all_calib_records or run_dir == valid_runs[0]:
+                    calib_records = extract_calibration_data(target_dir, dataset, model)
+                    if calib_records and run_dir == valid_runs[0]:
+                        all_calib_records.extend(calib_records)
+
+            if not all_run_records:
+                print("    No summary records found across any run. Skipping.")
                 continue
-            
-            print(f"Found {len(records)} summary records. Assembling Master Dashboard...")
-            fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(24, 16)) 
-            fig.suptitle(f'Fact-Checking Pipeline Evaluation Dashboard | {dataset.capitalize()} - {model}', fontsize=20, fontweight='bold', y=0.97)
-            
-            plot_accuracy(axes[0, 0], records)
-            plot_tokens(axes[0, 1], records)
-            plot_calls(axes[1, 0], records)
-            plot_auroc(axes[1, 1], records)
-            
-            plt.tight_layout(rect=[0, 0.03, 1, 0.95], h_pad=3.0, w_pad=2.0)
-            plt.savefig(out_dir / "1_dashboard_summary.png", dpi=300, bbox_inches='tight', facecolor='white')
-            plt.close()
-            
-            if uq_data:
-                print(f"Found {len(uq_data)} UQ JSONL files. Generating Deep Analyses...")
-                generate_roc_curves(uq_data, out_dir / "2_uq_roc_curves.png")
-                generate_uq_flow_plots(uq_data, out_dir / "3_uq_conditional_flow.png")
-                generate_uq_routing_accuracy_plot(uq_data, out_dir / "4_uq_overall_routing_accuracy.png")
-            else:
-                print("Warning: UQ JSONL data could not be parsed. Deep Analyses skipped.")
 
-            print(f"Generating Tabular Reports...")
-            
-            table1_df, table2_df = export_summary_tables(records, unified_tables_dir, dataset, model)
+            # --- Average across runs ---
+            averaged_records = average_records_across_runs(all_run_records)
+            print(f"    Averaged {len(averaged_records)} methods across {len(all_run_records)} runs.")
+
+            # --- Generate plots from first run (representative sample) ---
+            if first_run_records:
+                print(f"    Generating plots from {valid_runs[0].name} as representative run...")
+                fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(24, 16)) 
+                fig.suptitle(f'Fact-Checking Pipeline Evaluation Dashboard | {dataset.capitalize()} - {model}', fontsize=20, fontweight='bold', y=0.97)
+                
+                plot_accuracy(axes[0, 0], first_run_records)
+                plot_tokens(axes[0, 1], first_run_records)
+                plot_calls(axes[1, 0], first_run_records)
+                plot_auroc(axes[1, 1], first_run_records)
+                
+                plt.tight_layout(rect=[0, 0.03, 1, 0.95], h_pad=3.0, w_pad=2.0)
+                plt.savefig(out_dir / "1_dashboard_summary.png", dpi=300, bbox_inches='tight', facecolor='white')
+                plt.close()
+                
+                if first_run_uq_data:
+                    print(f"    Found {len(first_run_uq_data)} UQ JSONL files. Generating Deep Analyses...")
+                    generate_roc_curves(first_run_uq_data, out_dir / "2_uq_roc_curves.png")
+                    generate_uq_flow_plots(first_run_uq_data, out_dir / "3_uq_conditional_flow.png")
+                    generate_uq_routing_accuracy_plot(first_run_uq_data, out_dir / "4_uq_overall_routing_accuracy.png")
+                else:
+                    print("    Warning: UQ JSONL data could not be parsed. Deep Analyses skipped.")
+
+            # --- Generate tables from averaged data ---
+            print(f"    Generating Averaged Tabular Reports...")
+            table1_df, table2_df = export_summary_tables(averaged_records, unified_tables_dir, dataset, model)
             if table1_df is not None:
                 all_table1_records.append(table1_df)
             if table2_df is not None:
                 all_table2_records.append(table2_df)
 
-            print(f"✅ All visualizations saved successfully to: {out_dir}")
-            print(f"✅ All tables saved successfully to: {unified_tables_dir}")
+            print(f"    ✅ All visualizations saved to: {out_dir}")
+            print(f"    ✅ All tables saved to: {unified_tables_dir}")
 
         if all_calib_records:
             print(f"Generating Unified Calibration Appendix Table...")
             export_unified_calibration_table(all_calib_records, unified_tables_dir, dataset)
-            print(f"✅ Calibration Appendix table saved successfully to: {unified_tables_dir}")
+            print(f"✅ Calibration Appendix table saved to: {unified_tables_dir}")
             
     if all_table1_records:
         unified_df = pd.concat(all_table1_records, ignore_index=True)

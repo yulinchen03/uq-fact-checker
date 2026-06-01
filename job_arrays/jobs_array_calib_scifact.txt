@@ -4,3 +4,5 @@
 --run_type calibrate --dataset scifact --calibration_split train --model mistralai/Mistral-7B-Instruct-v0.3 --output_format label_only
 --run_type calibrate --dataset scifact --calibration_split train --model meta-llama/Llama-3.1-8B-Instruct --output_format label_only --logic_eval_method discrete --check_logic
 --run_type calibrate --dataset scifact --calibration_split train --model meta-llama/Llama-3.1-8B-Instruct --output_format label_only
+--run_type calibrate --dataset scifact --calibration_split train --model Qwen/Qwen3-30B-A3B-Instruct-2507 --output_format label_only --logic_eval_method discrete --check_logic
+--run_type calibrate --dataset scifact --calibration_split train --model Qwen/Qwen3-30B-A3B-Instruct-2507 --output_format label_only

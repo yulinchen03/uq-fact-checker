@@ -7,7 +7,7 @@ MODELS = [
     "mistralai/Mistral-7B-Instruct-v0.3",
     "meta-llama/Llama-3.1-8B-Instruct",
     # "google/gemma-3-12b-it",
-    # "Qwen/Qwen3-30B-A3B-Instruct-2507"
+    "Qwen/Qwen3-30B-A3B-Instruct-2507"
     # "gpt-5.4-mini-2026-03-17",
     # "gpt-5.4-nano-2026-03-17",
     # "qwen3.6-max-preview",

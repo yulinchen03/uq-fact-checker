@@ -23,16 +23,3 @@ Qwen3-4B-Instruct-2507,Perplexity,0.567,1.102,53.4%,0.525,0.528,0.625
 Qwen3-4B-Instruct-2507,MaxSeqProb,0.475,0.002,15.1%,0.492,0.868,0.176
 Qwen3-4B-Instruct-2507,Perplexity,0.457,1.000,15.1%,0.492,0.868,0.176
 Qwen3-4B-Instruct-2507,MeanTokEnt,0.448,0.003,15.3%,0.492,0.866,0.178
-gemma-3-12b-it,Perplexity,0.606,1.203,51.9%,0.436,0.563,0.608
-gemma-3-12b-it,MeanTokEnt,0.606,0.386,55.3%,0.443,0.527,0.638
-gemma-3-12b-it,Ensemble,0.601,0.517,57.1%,0.444,0.511,0.659
-gemma-3-12b-it,MaxSeqProb,0.594,11.679,43.0%,0.425,0.647,0.513
-gemma-3-12b-it,MeanTokEnt,0.592,0.000,37.3%,0.427,0.702,0.460
-gemma-3-12b-it,MeanTokEnt [Logic Check On],0.591,0.000,56.2%,0.464,0.513,0.649
-gemma-3-12b-it,Ensemble [Logic Check On],0.559,0.514,29.4%,0.424,0.767,0.364
-gemma-3-12b-it,LogicalContradiction [Logic Check On],0.553,1.000,24.4%,0.426,0.806,0.301
-gemma-3-12b-it,Perplexity,0.552,1.000,68.2%,0.495,0.370,0.742
-gemma-3-12b-it,Perplexity [Logic Check On],0.551,1.000,68.4%,0.495,0.367,0.742
-gemma-3-12b-it,MaxSeqProb,0.551,0.000,68.2%,0.495,0.370,0.742
-gemma-3-12b-it,MaxSeqProb [Logic Check On],0.550,0.000,68.4%,0.495,0.367,0.742
-gemma-3-12b-it,Ensemble,0.544,0.496,81.3%,0.506,0.231,0.864

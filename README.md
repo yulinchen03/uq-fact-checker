@@ -135,3 +135,14 @@ After populating the databases, you can start the evaluation runs by submitting 
 ./start_run_quantemp.sh
 ./start_run_openai.sh
 ```
+
+## License
+
+The **code** in this repository is released under the [MIT License](LICENSE).
+
+This repository also bundles **third-party datasets** under their own licenses, which are **not** covered by the MIT license above and are included for non-commercial research use only:
+
+- **SciFact** — CC BY-NC 2.0
+- **QuanTemp** — CC BY-NC 4.0
+
+Pretrained models used by the pipeline (e.g., Qwen3, Mistral-7B, Llama-3.1-8B, SPLADE) are downloaded separately from their original sources and remain subject to their respective licenses (e.g., Apache-2.0, Llama 3.1 Community License, CC BY-NC-SA 4.0). Users are responsible for complying with all applicable dataset and model licenses.

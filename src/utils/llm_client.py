@@ -73,14 +73,14 @@ class LocalLLMClient:
             if output_format == "label_only":
                 allowed_labels = ["True", "False", "Conflicting"] if "quantemp" in dataset_name.lower() else ["SUPPORT", "CONTRADICT", "NOT ENOUGH INFO"]
                 sampling_params = SamplingParams(
-                    temperature=0.1, 
+                    temperature=0.0, 
                     max_tokens=5, 
                     stop=["<|im_end|>", "<|eot_id|>", "```", "<|im_start|>", "<|start_header_id|>"],
                     structured_outputs=StructuredOutputsParams(choice=allowed_labels)
                 )
             else:
                 sampling_params = SamplingParams(
-                    temperature=0.1, 
+                    temperature=0.0, 
                     max_tokens=max_new_tokens,
                     stop=["<|im_end|>", "<|eot_id|>", "<|im_start|>", "<|start_header_id|>"]
                 )
@@ -168,7 +168,7 @@ class GeminiLLMClient:
             
             generation_config = types.GenerateContentConfig(
                 max_output_tokens=max_new_tokens,
-                temperature=0.1,
+                temperature=0.0,
                 safety_settings=safety_settings
             )
             
@@ -286,7 +286,7 @@ class OpenAILLMClient:
             api_kwargs = dict(
                 model=self.model_name,
                 messages=messages,
-                temperature=0.1,
+                temperature=0.0,
                 max_completion_tokens=max_new_tokens,
             )
             if self.base_url:
