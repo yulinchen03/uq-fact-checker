@@ -204,7 +204,6 @@ class GoldRetriever(BaseRetriever):
         return sample
 
 
-# Qwen3 Reranker Helper
 # The Qwen3 reranker is a GENERATIVE model, not a standard cross-encoder.
 # It must NOT be loaded with AutoModelForSequenceClassification or via the
 # sentence-transformers CrossEncoder API — both will produce garbage scores.
@@ -215,8 +214,8 @@ class GoldRetriever(BaseRetriever):
 #   3. Score = log P("yes") - log P("no") at that token position.
 #
 # The instruction field is critical for fact-checking tasks. The default
-# instruction ("Given a web search query...") causes the contradiction trap:
-# the model penalises documents that REFUTE the claim. We override it with
+# instruction ("Given a web search query...") causes
+# the model to penalize documents that REFUTE the claim. We override it with
 # an instruction that explicitly asks for evidential relevance regardless of
 # stance.
 # ---------------------------------------------------------------------------
@@ -328,7 +327,7 @@ class QwenReranker:
             batch_prompts.append({"prompt_token_ids": input_ids})
 
         # Ask for top 20 logprobs to ensure we capture the probabilities of 'yes' and 'no'
-        sampling_params = SamplingParams(max_tokens=1, temperature=0.0, logprobs=20)
+        sampling_params = SamplingParams(max_tokens=1, temperature=0.5, logprobs=20)
         
         outputs = self.model.generate(batch_prompts, sampling_params=sampling_params, use_tqdm=False)
 

@@ -108,7 +108,7 @@ def main():
     )
 
     # Shared generation config
-    GEN_TEMPERATURE = 0.5 if cfg.uncertainty.method == "SemanticEntropy" else 0.0
+    GEN_TEMPERATURE = 0.5
     GEN_STOP_TOKENS = ["<|im_end|>", "<|eot_id|>", "```", "<|im_start|>", "<|start_header_id|>"]
 
     if args.output_format == "label_only":

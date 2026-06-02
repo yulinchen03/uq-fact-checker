@@ -27,7 +27,7 @@ class AdversarialConsistencyEvaluator:
 
         prompt_tokens_count = len(tokenizer.encode(prompt))
         neg_sampling_params = SamplingParams(
-            temperature=0.0,
+            temperature=0.5,
             max_tokens=64,
             stop=["<|im_end|>", "<|eot_id|>", "\n"]
         )

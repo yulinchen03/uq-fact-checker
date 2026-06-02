@@ -21,7 +21,7 @@ class UQDecomposePipeline(PipelineComponent):
         self.dataset = cfg.data.dataset_name.lower()
 
         if model and tokenizer:
-            GEN_TEMPERATURE = 0.5 if cfg.uncertainty.method == "SemanticEntropy" else 0.0
+            GEN_TEMPERATURE = 0.5
             GEN_STOP_TOKENS = ["<|im_end|>", "<|eot_id|>", "```", "<|im_start|>", "<|start_header_id|>"]
 
             if self.output_format == "label_only":

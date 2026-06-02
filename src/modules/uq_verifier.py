@@ -66,7 +66,7 @@ class VLLMGreedyLMProbsCalculator(StatCalculator):
         sampling_params = SamplingParams(
             prompt_logprobs=1,
             max_tokens=1,
-            temperature=0.0
+            temperature=0.5
         )
 
         bos_id = tokenizer.bos_token_id if tokenizer.bos_token_id is not None else tokenizer.eos_token_id
