@@ -8,9 +8,9 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT_DIR))
 
-def generate_markdown_summary(dataset_name: str, model_name: str):
+def generate_markdown_summary(dataset_name: str, model_name: str, seed: int = 42):
     clean_model_name = model_name.split("/")[-1]
-    calib_dir = ROOT_DIR / "run_results" / dataset_name / clean_model_name / "calibration"
+    calib_dir = ROOT_DIR / "run_results" / f"seed_{seed}" / dataset_name / clean_model_name / "calibration"
     
     if not calib_dir.exists():
         print(f"❌ Directory not found: {calib_dir}")
@@ -98,6 +98,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate a Markdown summary of calibration experiments.")
     parser.add_argument("--dataset", type=str, required=True, help="Dataset name (e.g., quantemp)")
     parser.add_argument("--model", type=str, required=True, help="Model name or path")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
     
     args = parser.parse_args()
-    generate_markdown_summary(args.dataset, args.model)
+    generate_markdown_summary(args.dataset, args.model, args.seed)

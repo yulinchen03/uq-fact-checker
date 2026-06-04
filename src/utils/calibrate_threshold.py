@@ -241,6 +241,7 @@ def parse_args():
     parser.add_argument("--check_logic", action="store_true", help="Enable the Logical Contradiction check")
     parser.add_argument("--output_format", type=str, default="label_only", help="Format suffix of the target file")
     parser.add_argument("--logic_eval_method", type=str, choices=["discrete", "probabilistic"], default="discrete", help="Evaluation method for the logical contradiction")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     
     return parser.parse_known_args()
 
@@ -259,7 +260,7 @@ def main():
     if args.split: cfg.data.split = args.split
     if args.model: cfg.llm.model_name = args.model
 
-    lock_random_seeds(42)
+    lock_random_seeds(args.seed)
     dataset_name = cfg.data.dataset_name
     split = cfg.data.split
     model_name = cfg.llm.model_name.split("/")[-1]
@@ -269,7 +270,7 @@ def main():
     else:
         logic_str = "logic_OFF"
 
-    base_dir = ROOT_DIR / "run_results" / dataset_name / model_name / "calibration"
+    base_dir = ROOT_DIR / "run_results" / f"seed_{args.seed}" / dataset_name / model_name / "calibration"
     path = base_dir / f"uq_scores_{split}_{args.output_format}_{logic_str}.jsonl"
     
     print(f"\n{'='*60}")

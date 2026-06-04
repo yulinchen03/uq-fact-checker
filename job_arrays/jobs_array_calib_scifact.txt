@@ -1,6 +1,30 @@
---run_type calibrate --dataset scifact --calibration_split train --model Qwen/Qwen3-4B-Instruct-2507 --output_format label_only --logic_eval_method discrete --check_logic
---run_type calibrate --dataset scifact --calibration_split train --model Qwen/Qwen3-4B-Instruct-2507 --output_format label_only
---run_type calibrate --dataset scifact --calibration_split train --model mistralai/Mistral-7B-Instruct-v0.3 --output_format label_only --logic_eval_method discrete --check_logic
---run_type calibrate --dataset scifact --calibration_split train --model mistralai/Mistral-7B-Instruct-v0.3 --output_format label_only
---run_type calibrate --dataset scifact --calibration_split train --model meta-llama/Llama-3.1-8B-Instruct --output_format label_only --logic_eval_method discrete --check_logic
---run_type calibrate --dataset scifact --calibration_split train --model meta-llama/Llama-3.1-8B-Instruct --output_format label_only
+--run_type calibrate --dataset scifact --calibration_split train --model Qwen/Qwen3-4B-Instruct-2507 --seed 42 --output_format label_only --logic_eval_method discrete --check_logic
+--run_type calibrate --dataset scifact --calibration_split train --model Qwen/Qwen3-4B-Instruct-2507 --seed 42 --output_format label_only
+--run_type calibrate --dataset scifact --calibration_split train --model mistralai/Mistral-7B-Instruct-v0.3 --seed 42 --output_format label_only --logic_eval_method discrete --check_logic
+--run_type calibrate --dataset scifact --calibration_split train --model mistralai/Mistral-7B-Instruct-v0.3 --seed 42 --output_format label_only
+--run_type calibrate --dataset scifact --calibration_split train --model meta-llama/Llama-3.1-8B-Instruct --seed 42 --output_format label_only --logic_eval_method discrete --check_logic
+--run_type calibrate --dataset scifact --calibration_split train --model meta-llama/Llama-3.1-8B-Instruct --seed 42 --output_format label_only
+--run_type calibrate --dataset scifact --calibration_split train --model Qwen/Qwen3-4B-Instruct-2507 --seed 1 --output_format label_only --logic_eval_method discrete --check_logic
+--run_type calibrate --dataset scifact --calibration_split train --model Qwen/Qwen3-4B-Instruct-2507 --seed 1 --output_format label_only
+--run_type calibrate --dataset scifact --calibration_split train --model mistralai/Mistral-7B-Instruct-v0.3 --seed 1 --output_format label_only --logic_eval_method discrete --check_logic
+--run_type calibrate --dataset scifact --calibration_split train --model mistralai/Mistral-7B-Instruct-v0.3 --seed 1 --output_format label_only
+--run_type calibrate --dataset scifact --calibration_split train --model meta-llama/Llama-3.1-8B-Instruct --seed 1 --output_format label_only --logic_eval_method discrete --check_logic
+--run_type calibrate --dataset scifact --calibration_split train --model meta-llama/Llama-3.1-8B-Instruct --seed 1 --output_format label_only
+--run_type calibrate --dataset scifact --calibration_split train --model Qwen/Qwen3-4B-Instruct-2507 --seed 2 --output_format label_only --logic_eval_method discrete --check_logic
+--run_type calibrate --dataset scifact --calibration_split train --model Qwen/Qwen3-4B-Instruct-2507 --seed 2 --output_format label_only
+--run_type calibrate --dataset scifact --calibration_split train --model mistralai/Mistral-7B-Instruct-v0.3 --seed 2 --output_format label_only --logic_eval_method discrete --check_logic
+--run_type calibrate --dataset scifact --calibration_split train --model mistralai/Mistral-7B-Instruct-v0.3 --seed 2 --output_format label_only
+--run_type calibrate --dataset scifact --calibration_split train --model meta-llama/Llama-3.1-8B-Instruct --seed 2 --output_format label_only --logic_eval_method discrete --check_logic
+--run_type calibrate --dataset scifact --calibration_split train --model meta-llama/Llama-3.1-8B-Instruct --seed 2 --output_format label_only
+--run_type calibrate --dataset scifact --calibration_split train --model Qwen/Qwen3-4B-Instruct-2507 --seed 3 --output_format label_only --logic_eval_method discrete --check_logic
+--run_type calibrate --dataset scifact --calibration_split train --model Qwen/Qwen3-4B-Instruct-2507 --seed 3 --output_format label_only
+--run_type calibrate --dataset scifact --calibration_split train --model mistralai/Mistral-7B-Instruct-v0.3 --seed 3 --output_format label_only --logic_eval_method discrete --check_logic
+--run_type calibrate --dataset scifact --calibration_split train --model mistralai/Mistral-7B-Instruct-v0.3 --seed 3 --output_format label_only
+--run_type calibrate --dataset scifact --calibration_split train --model meta-llama/Llama-3.1-8B-Instruct --seed 3 --output_format label_only --logic_eval_method discrete --check_logic
+--run_type calibrate --dataset scifact --calibration_split train --model meta-llama/Llama-3.1-8B-Instruct --seed 3 --output_format label_only
+--run_type calibrate --dataset scifact --calibration_split train --model Qwen/Qwen3-4B-Instruct-2507 --seed 4 --output_format label_only --logic_eval_method discrete --check_logic
+--run_type calibrate --dataset scifact --calibration_split train --model Qwen/Qwen3-4B-Instruct-2507 --seed 4 --output_format label_only
+--run_type calibrate --dataset scifact --calibration_split train --model mistralai/Mistral-7B-Instruct-v0.3 --seed 4 --output_format label_only --logic_eval_method discrete --check_logic
+--run_type calibrate --dataset scifact --calibration_split train --model mistralai/Mistral-7B-Instruct-v0.3 --seed 4 --output_format label_only
+--run_type calibrate --dataset scifact --calibration_split train --model meta-llama/Llama-3.1-8B-Instruct --seed 4 --output_format label_only --logic_eval_method discrete --check_logic
+--run_type calibrate --dataset scifact --calibration_split train --model meta-llama/Llama-3.1-8B-Instruct --seed 4 --output_format label_only

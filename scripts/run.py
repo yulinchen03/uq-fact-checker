@@ -108,7 +108,8 @@ def get_experiment_config():
 
 @hydra.main(version_base=None, config_path="../config", config_name="config")
 def main(cfg: DictConfig):
-    lock_random_seeds(42)
+    seed = cfg.get("seed", 42)
+    lock_random_seeds(seed)
     
     model_name = cfg.llm.model_name.split("/")[-1]
     
@@ -119,7 +120,7 @@ def main(cfg: DictConfig):
     if cfg.mode in ('uq_aware', 'uq_decompose'):
         calib_split = cfg.data.get("calibrated_split", "val")
         
-        calibrated_thresh_path = project_root / "run_results" / cfg.data.dataset_name / model_name / "calibration" / f"optimal_thresholds_{calib_split}_{output_format}_{logic_suffix}.json"        
+        calibrated_thresh_path = project_root / "run_results" / f"seed_{seed}" / cfg.data.dataset_name / model_name / "calibration" / f"optimal_thresholds_{calib_split}_{output_format}_{logic_suffix}.json"        
         if calibrated_thresh_path.exists():
             with open(calibrated_thresh_path, 'r') as f:
                 thresh_data = json.load(f)
@@ -154,7 +155,7 @@ def main(cfg: DictConfig):
         print(f"  Step {i+1}: {step.__class__.__name__}")
     print("-----------------------\n")
     
-    base_out_dir = project_root / "run_results" / cfg.data.dataset_name / model_name
+    base_out_dir = project_root / "run_results" / f"seed_{seed}" / cfg.data.dataset_name / model_name
     
     if cfg.mode in ("uq_aware", "uq_decompose"):
         final_dir = base_out_dir / cfg.mode / cfg.uncertainty.method

@@ -46,11 +46,12 @@ ARGS=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "${PROJECT}/job_arrays/jobs_array_calib_
 
 DATASET=$(echo $ARGS | awk -F'--dataset ' '{print $2}' | awk '{print $1}')
 MODEL=$(echo $ARGS | awk -F'--model ' '{print $2}' | awk '{print $1}')
+SEED=$(echo $ARGS | awk -F'--seed ' '{print $2}' | awk '{print $1}')
 
 echo "=========================================================="
 echo "🚀 Calibration Array Task ID: $SLURM_ARRAY_TASK_ID"
 echo "⚙️  Executing: $ARGS"
-echo "🎯 Extracted Target -> Dataset: $DATASET | Model: $MODEL"
+echo "🎯 Extracted Target -> Dataset: $DATASET | Model: $MODEL | Seed: $SEED"
 echo "📁 Using Isolated Cache: ${TASK_CACHE}"
 echo "=========================================================="
 
@@ -69,4 +70,4 @@ apptainer exec --nv -C \
              echo -e '\n==========================================================' && \
              echo '📊 Generating/Updating Markdown Summary...' && \
              echo '==========================================================' && \
-             python /workspace/src/utils/summarize_calibrations.py --dataset $DATASET --model $MODEL"
+             python /workspace/src/utils/summarize_calibrations.py --dataset $DATASET --model $MODEL --seed $SEED"

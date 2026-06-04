@@ -50,7 +50,8 @@ def clean_label(label):
 
 def resolve_paths(cfg, config, model_name, output_format):
     """Constructs and validates all file paths needed for analysis."""
-    base_dir = ROOT_DIR / "run_results" / cfg.data.dataset_name / model_name
+    seed = cfg.get("seed", 42)
+    base_dir = ROOT_DIR / "run_results" / f"seed_{seed}" / cfg.data.dataset_name / model_name
     logic_suffix = f"logic_{config.get('logic_eval_method', 'discrete')}" if config.get('check_logic') == 'Yes' else "logic_OFF"
     
     if cfg.mode in ('uq_aware', 'uq_decompose'):
@@ -63,7 +64,7 @@ def resolve_paths(cfg, config, model_name, output_format):
     thresh_path = None
     if cfg.mode in ('uq_aware', 'uq_decompose'):
         calib_split = config.get('calibrated_split', 'val')
-        thresh_path = ROOT_DIR / "run_results" / cfg.data.dataset_name / model_name / "calibration" / f"optimal_thresholds_{calib_split}_{output_format}_{logic_suffix}.json"
+        thresh_path = ROOT_DIR / "run_results" / f"seed_{seed}" / cfg.data.dataset_name / model_name / "calibration" / f"optimal_thresholds_{calib_split}_{output_format}_{logic_suffix}.json"
 
     return file_path, save_path, thresh_path, logic_suffix
 

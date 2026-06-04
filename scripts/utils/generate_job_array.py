@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-# --- Configuration for your experiment sweep ---
+SEEDS = [42, 1, 2, 3, 4]
 MODELS = [
     "Qwen/Qwen3-4B-Instruct-2507",
     "mistralai/Mistral-7B-Instruct-v0.3",
@@ -100,63 +100,68 @@ def main():
     
     has_openai_models = any(m in OPENAI_MODELS for m in MODELS)
 
-    for model in MODELS:
-        api_overrides = get_model_overrides(model)
-        is_openai_model = model in OPENAI_MODELS
+    for seed in SEEDS:
+        for model in MODELS:
+            api_overrides = get_model_overrides(model)
+            is_openai_model = model in OPENAI_MODELS
 
-        for ds in DATASETS:
-            dataset_name = ds["name"]
-            calib_split = ds["calib_split"]
-            test_split = ds["test_split"]
+            for ds in DATASETS:
+                dataset_name = ds["name"]
+                calib_split = ds["calib_split"]
+                test_split = ds["test_split"]
 
-            if is_openai_model:
-                for mode in OPENAI_BASELINES:
-                    cmd_eval = (f"--run_type evaluate --dataset {dataset_name} "
-                                f"--model {model} --mode {mode} --test_split {test_split} "
-                                f"{OUTPUT_FORMATS[0]}{api_overrides}").strip()
-                    openai_eval_commands.append(cmd_eval)
-                continue  # Closed-source models don't support UQ, so skip the rest
-
-            # 1. Generate Baseline Evaluation Jobs
-            # Baselines do not use UQ, so we only generate them ONCE per dataset/model!
-            for mode in BASELINES:
-                cmd_eval = (f"--run_type evaluate --dataset {dataset_name} "
-                            f"--model {model} --mode {mode} --test_split {test_split} "
-                            f"{OUTPUT_FORMATS[0]}{api_overrides}").strip()
-                eval_commands[dataset_name].append(cmd_eval)
-                if has_openai_models:
-                    openai_eval_commands.append(cmd_eval)
-
-            # 2. Generate UQ & Calibration Jobs for BOTH Logic States
-            for logic in LOGIC_STATES:
-                logic_args = logic["args"]
-                is_logic_on = logic["logic_on"]
-
-                for fmt in OUTPUT_FORMATS:
-                    # Calibration Jobs
-                    cmd_calib = (f"--run_type calibrate --dataset {dataset_name} "
-                                 f"--calibration_split {calib_split} --model {model} "
-                                 f"{fmt} {logic_args}{api_overrides}").strip()
-                    calib_commands[dataset_name].append(cmd_calib)
-
-                # UQ Evaluation Jobs
-                for uq in UQ_METHODS:
-
-                    # LogicalContradiction requires logic to be ON
-                    if uq == "LogicalContradiction" and not is_logic_on:
-                        continue
-
-                    # When logic is OFF, only run Ensemble as a comparison baseline.
-                    # All other methods are only evaluated with logic ON.
-                    if not is_logic_on and uq != "Ensemble":
-                        continue
-
-                    for mode in UQ_MODES:
+                if is_openai_model:
+                    for mode in OPENAI_BASELINES:
                         cmd_eval = (f"--run_type evaluate --dataset {dataset_name} "
                                     f"--model {model} --mode {mode} --test_split {test_split} "
-                                    f"--uq_method {uq} --calibrated_split {calib_split} "
-                                    f"{OUTPUT_FORMATS[0]} {logic_args}{api_overrides}").strip()
-                        eval_commands[dataset_name].append(cmd_eval)
+                                    f"--seed {seed} "
+                                    f"{OUTPUT_FORMATS[0]}{api_overrides}").strip()
+                        openai_eval_commands.append(cmd_eval)
+                    continue  # Closed-source models don't support UQ, so skip the rest
+
+                # 1. Generate Baseline Evaluation Jobs
+                # Baselines do not use UQ, so we only generate them ONCE per dataset/model!
+                for mode in BASELINES:
+                    cmd_eval = (f"--run_type evaluate --dataset {dataset_name} "
+                                f"--model {model} --mode {mode} --test_split {test_split} "
+                                f"--seed {seed} "
+                                f"{OUTPUT_FORMATS[0]}{api_overrides}").strip()
+                    eval_commands[dataset_name].append(cmd_eval)
+                    if has_openai_models:
+                        openai_eval_commands.append(cmd_eval)
+
+                # 2. Generate UQ & Calibration Jobs for BOTH Logic States
+                for logic in LOGIC_STATES:
+                    logic_args = logic["args"]
+                    is_logic_on = logic["logic_on"]
+
+                    for fmt in OUTPUT_FORMATS:
+                        # Calibration Jobs
+                        cmd_calib = (f"--run_type calibrate --dataset {dataset_name} "
+                                     f"--calibration_split {calib_split} --model {model} "
+                                     f"--seed {seed} "
+                                     f"{fmt} {logic_args}{api_overrides}").strip()
+                        calib_commands[dataset_name].append(cmd_calib)
+
+                    # UQ Evaluation Jobs
+                    for uq in UQ_METHODS:
+
+                        # LogicalContradiction requires logic to be ON
+                        if uq == "LogicalContradiction" and not is_logic_on:
+                            continue
+
+                        # When logic is OFF, only run Ensemble as a comparison baseline.
+                        # All other methods are only evaluated with logic ON.
+                        if not is_logic_on and uq != "Ensemble":
+                            continue
+
+                        for mode in UQ_MODES:
+                            cmd_eval = (f"--run_type evaluate --dataset {dataset_name} "
+                                        f"--model {model} --mode {mode} --test_split {test_split} "
+                                        f"--uq_method {uq} --calibrated_split {calib_split} "
+                                        f"--seed {seed} "
+                                        f"{OUTPUT_FORMATS[0]} {logic_args}{api_overrides}").strip()
+                            eval_commands[dataset_name].append(cmd_eval)
 
     for dataset_name in calib_commands.keys():
         if calib_commands[dataset_name]:

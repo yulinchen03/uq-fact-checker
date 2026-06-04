@@ -29,7 +29,8 @@ def run_calibration(args, unknown_hydra_args):
         "--split", args.calibration_split,
         "--model", args.model,
         "--output_format", args.output_format,
-        "--logic_eval_method", args.logic_eval_method
+        "--logic_eval_method", args.logic_eval_method,
+        "--seed", str(args.seed)
     ]
     
     if args.check_logic:
@@ -94,7 +95,8 @@ def run_evaluation(args, unknown_hydra_args):
         f"retriever.type={args.retriever_type}",
         f"llm.model_name={args.model}",
         f"check_logic={args.check_logic}",
-        f"logic_eval_method={args.logic_eval_method}"
+        f"logic_eval_method={args.logic_eval_method}",
+        f"seed={args.seed}"
     ]
     
     print("⏳ Running experiment pipeline...")
@@ -118,6 +120,7 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=str, required=True, help="e.g., scifact or quantemp")
     parser.add_argument("--model", type=str, required=True, help="Full HF model path (e.g., meta-llama/Llama-3.2-1B-Instruct)")
     parser.add_argument("--retriever_type", type=str, default="hybrid", help="e.g., vector or hybrid")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
     
     # 3. Calibration-specific arguments
     parser.add_argument("--calibration_split", type=str, help="Split to calibrate on (Required if run_type=calibrate)")

@@ -3,6 +3,7 @@ defaults:
   - _self_
 
 experiment_name: "thesis"
+seed: 42
 mode: "always_retrieve" # "always_retrieve" | "never_retrieve" | "uq_aware" | "granular" | "uq_decompose"
 output_format: "label_only"
 logic_eval_method: "discrete"

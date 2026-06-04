@@ -26,15 +26,16 @@ def clean_label(label: str) -> str:
 class UQEnsembler:
     """Manages the training, cross-validation, and packaging of Logistic Regression UQ Ensembles."""
 
-    def __init__(self, dataset: str, split: str, model_name: str, check_logic: bool, output_format: str, logic_eval_method: str):
+    def __init__(self, dataset: str, split: str, model_name: str, check_logic: bool, output_format: str, logic_eval_method: str, seed: int = 42):
         self.dataset = dataset
         self.split = split
         self.model_name = model_name.split("/")[-1]
         self.check_logic = check_logic
         self.output_format = output_format
         self.logic_eval_method = logic_eval_method
+        self.seed = seed
         
-        self.base_dir = ROOT_DIR / "run_results" / self.dataset / self.model_name / "calibration"
+        self.base_dir = ROOT_DIR / "run_results" / f"seed_{self.seed}" / self.dataset / self.model_name / "calibration"
         
         if self.check_logic:
             self.logic_str = f"logic_{self.logic_eval_method}"
@@ -134,7 +135,7 @@ class UQEnsembler:
         print(f"⏳ Training Ensemble LR via Cross-Validation on {len(self.X_raw)} calibration lines...")
         cross_val_predictions = np.zeros(len(self.X_raw))
         
-        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=self.seed)
         for train_idx, val_idx in skf.split(self.X_raw, self.y_target):
             X_train, X_val = self.X_raw[train_idx], self.X_raw[val_idx]
             y_train = self.y_target[train_idx]
@@ -148,7 +149,7 @@ class UQEnsembler:
                 l1_ratio=0,         # L2 regularization
                 solver='lbfgs',
                 C=1.0,
-                random_state=42,
+                random_state=self.seed,
                 max_iter=10000,
             )
             clf.fit(X_train_scaled, y_train)
@@ -182,7 +183,7 @@ class UQEnsembler:
             l1_ratio=0,         # L2 regularization
             solver='lbfgs',
             C=1.0,
-            random_state=42,
+            random_state=self.seed,
             max_iter=10000,
         )
         final_clf.fit(X_raw_scaled, self.y_target)
@@ -284,6 +285,7 @@ def main():
     parser.add_argument("--check_logic", action="store_true", help="Whether to expect LogicalContradiction scores")
     parser.add_argument("--output_format", type=str, default="label_only", help="Format suffix of the target file")
     parser.add_argument("--logic_eval_method", type=str, choices=["discrete", "probabilistic"], default="discrete", help="Evaluation method for the logical contradiction")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
 
     args, _ = parser.parse_known_args()
 
@@ -293,7 +295,8 @@ def main():
         model_name=args.model,
         check_logic=args.check_logic,
         output_format=args.output_format,
-        logic_eval_method=args.logic_eval_method
+        logic_eval_method=args.logic_eval_method,
+        seed=args.seed
     )
     ensembler.execute_pipeline()
 

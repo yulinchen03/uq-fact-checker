@@ -2,7 +2,7 @@
 #SBATCH --job-name=eval
 #SBATCH --partition=insy,general
 #SBATCH --qos=medium
-#SBATCH --time=12:00:00
+#SBATCH --time=10:00:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=32768

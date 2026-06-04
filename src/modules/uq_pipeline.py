@@ -81,7 +81,8 @@ class UncertaintyAwarePipeline(PipelineComponent):
         logic_suffix = f"_logic_{logic_method}" if check_logic and logic_method else "_logic_OFF"
 
         model_bundle_filename = f"ensemble_model_bundle_{calib_split}_{self.output_format}{logic_suffix}.pkl"
-        model_bundle_path = project_root / "run_results" / cfg.data.dataset_name / model_name / "calibration" / model_bundle_filename
+        seed = cfg.get("seed", 42)
+        model_bundle_path = project_root / "run_results" / f"seed_{seed}" / cfg.data.dataset_name / model_name / "calibration" / model_bundle_filename
         
         self.ensemble_model_bundle = None
         if model_bundle_path.exists():
