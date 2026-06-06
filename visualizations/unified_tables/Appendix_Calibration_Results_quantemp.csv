@@ -1,0 +1,28 @@
+Model,Method,AUROC,Threshold,Coverage,Risk,TPR,TNR
+Llama-3.1-8B-Instruct,Ensemble,0.673,0.467,46.6%,0.313,0.676,0.583
+Llama-3.1-8B-Instruct,MaxSeqProb,0.671,0.250,43.8%,0.306,0.703,0.553
+Llama-3.1-8B-Instruct,Ensemble [Logic Check On],0.671,0.467,46.2%,0.309,0.684,0.581
+Llama-3.1-8B-Instruct,MaxSeqProb [Logic Check On],0.670,0.256,44.5%,0.308,0.697,0.561
+Llama-3.1-8B-Instruct,Perplexity,0.670,1.133,43.8%,0.306,0.702,0.553
+Llama-3.1-8B-Instruct,Perplexity [Logic Check On],0.669,1.136,44.5%,0.308,0.696,0.561
+Llama-3.1-8B-Instruct,MeanTokEnt,0.644,0.314,43.4%,0.323,0.688,0.535
+Llama-3.1-8B-Instruct,MeanTokEnt [Logic Check On],0.642,0.314,43.5%,0.325,0.687,0.535
+Llama-3.1-8B-Instruct,LogicalContradiction [Logic Check On],0.459,inf,100.0%,0.451,0.000,1.000
+Mistral-7B-Instruct-v0.3,Ensemble,0.689,0.409,36.3%,0.276,0.790,0.502
+Mistral-7B-Instruct-v0.3,Ensemble [Logic Check On],0.686,0.480,48.5%,0.318,0.670,0.620
+Mistral-7B-Instruct-v0.3,MaxSeqProb,0.676,0.145,35.6%,0.275,0.795,0.493
+Mistral-7B-Instruct-v0.3,MaxSeqProb [Logic Check On],0.661,0.145,35.6%,0.274,0.791,0.485
+Mistral-7B-Instruct-v0.3,Perplexity,0.639,1.045,31.6%,0.277,0.816,0.437
+Mistral-7B-Instruct-v0.3,Perplexity [Logic Check On],0.625,1.045,31.6%,0.275,0.814,0.430
+Mistral-7B-Instruct-v0.3,MeanTokEnt,0.603,0.133,29.2%,0.279,0.829,0.403
+Mistral-7B-Instruct-v0.3,MeanTokEnt [Logic Check On],0.591,0.133,29.2%,0.276,0.827,0.397
+Mistral-7B-Instruct-v0.3,LogicalContradiction [Logic Check On],0.424,inf,100.0%,0.467,0.000,1.000
+Qwen3-4B-Instruct-2507,MaxSeqProb [Logic Check On],0.672,0.001,41.4%,0.265,0.740,0.526
+Qwen3-4B-Instruct-2507,Perplexity [Logic Check On],0.671,1.000,41.4%,0.265,0.740,0.526
+Qwen3-4B-Instruct-2507,MeanTokEnt [Logic Check On],0.671,0.003,41.3%,0.265,0.740,0.525
+Qwen3-4B-Instruct-2507,MaxSeqProb,0.670,0.001,41.4%,0.265,0.739,0.525
+Qwen3-4B-Instruct-2507,Perplexity,0.669,1.000,41.4%,0.265,0.739,0.525
+Qwen3-4B-Instruct-2507,MeanTokEnt,0.669,0.003,41.3%,0.265,0.739,0.524
+Qwen3-4B-Instruct-2507,Ensemble,0.659,0.416,43.6%,0.279,0.711,0.543
+Qwen3-4B-Instruct-2507,Ensemble [Logic Check On],0.653,0.426,49.4%,0.298,0.651,0.601
+Qwen3-4B-Instruct-2507,LogicalContradiction [Logic Check On],0.482,inf,100.0%,0.422,0.000,1.000

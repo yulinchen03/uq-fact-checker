@@ -12,7 +12,6 @@ from scipy.stats import spearmanr
 
 matplotlib.use("Agg")
 
-# --- Dynamic Path Resolution ---
 ROOT_DIR = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT_DIR))
 
@@ -331,7 +330,7 @@ def main():
                 )
 
     # ========================================================================
-    # AGGREGATED: Cross-model average correlation per (dataset, config)
+    # Cross-model average correlation per (dataset, config)
     # ========================================================================
     print(f"\n{'='*60}")
     print("📊 Generating aggregated cross-model heatmaps...")
@@ -341,7 +340,6 @@ def main():
         if len(entries) < 1:
             continue
 
-        # Find common methods across all models
         common_methods = None
         for e in entries:
             methods_set = set(e["rho"].columns)
@@ -354,7 +352,6 @@ def main():
             print(f"   ⚠️  {dataset}/{config_label}: Fewer than 2 common methods, skipping.")
             continue
 
-        # Average rho across models
         stacked = np.stack(
             [e["rho"].loc[common_methods, common_methods].values for e in entries]
         )
@@ -362,7 +359,6 @@ def main():
             np.nanmean(stacked, axis=0), index=common_methods, columns=common_methods
         )
 
-        # Conservative: report max p-value across models
         stacked_p = np.stack(
             [e["p"].loc[common_methods, common_methods].values for e in entries]
         )
@@ -378,9 +374,6 @@ def main():
         plot_path = output_dir / dataset / f"correlation_heatmap_avg_{config_label}.png"
         plot_correlation_heatmap(avg_rho, max_p, title, plot_path, figsize=(9, 8))
 
-    # ========================================================================
-    # SAVE CSV
-    # ========================================================================
     if all_correlation_records:
         csv_df = pd.DataFrame(all_correlation_records)
         csv_path = output_dir / "pairwise_correlations.csv"

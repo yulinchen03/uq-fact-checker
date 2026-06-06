@@ -31,7 +31,6 @@ mkdir -p "${PROJECT}/logs"
 TASK_CACHE="${PROJECT}/.global_cache/eval_job_${SLURM_ARRAY_JOB_ID}_task_${SLURM_ARRAY_TASK_ID}"
 mkdir -p "${TASK_CACHE}"
 
-# --- ORPHAN STATE PREVENTION: Graceful Teardown Trap ---
 cleanup() {
     echo -e "\n🛑 Caught exit signal or script ended. Executing graceful teardown..."
     

@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH --job-name=thesis-benchmark
 #SBATCH --partition=general,insy
-#SBATCH --qos=medium          # 'short' is for jobs 4 hours or less
-#SBATCH --time=7:00:00      # 8 hours should be plenty for the validation split
+#SBATCH --qos=medium
+#SBATCH --time=7:00:00
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=4    # DAIC requires even numbers
-#SBATCH --mem=65536          # 64GB RAM
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=65536
 #SBATCH --mail-type=BEGIN,END
-#SBATCH --gres=gpu:a40:1            # Request 1 GPU of any type
-#SBATCH --constraint=gpumem32   # Restrict to GPUs with ≥32 GB VRAM
+#SBATCH --gres=gpu:a40:1
+#SBATCH --constraint=gpumem32
 #SBATCH --output=logs/benchmark_%j.out
 #SBATCH --error=logs/benchmark_%j.err
 

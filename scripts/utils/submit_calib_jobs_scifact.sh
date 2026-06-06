@@ -23,7 +23,6 @@ LOCAL_CACHE="/tmp/torchinductor_${SLURM_ARRAY_TASK_ID}"
 mkdir -p "${TASK_CACHE}"
 mkdir -p "${LOCAL_CACHE}"
 
-# --- ORPHAN STATE PREVENTION: Graceful Teardown Trap ---
 cleanup() {
     echo -e "\n🛑 Caught exit signal or script ended. Executing graceful teardown..."
     

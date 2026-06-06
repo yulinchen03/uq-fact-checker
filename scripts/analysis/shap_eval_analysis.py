@@ -14,7 +14,7 @@ Auto-discovers all available Ensemble evaluation results.
 
 Usage:
     python scripts/analysis/shap_eval_analysis.py
-    python scripts/analysis/shap_eval_analysis.py --results_root results_dump/green_light
+    python scripts/analysis/shap_eval_analysis.py --results_root results_dump/final_1
     python scripts/analysis/shap_eval_analysis.py --dataset scifact --model gemma-3-12b-it
 """
 
@@ -31,7 +31,6 @@ from collections import defaultdict
 
 matplotlib.use("Agg")
 
-# --- Dynamic Path Resolution ---
 ROOT_DIR = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT_DIR))
 

@@ -101,10 +101,10 @@ def main():
     llm_engine = LLM(
         model=full_model_name,
         gpu_memory_utilization=0.75,
-        max_model_len=4096,
+        max_model_len=8192,
         trust_remote_code=True,
-        quantization="bitsandbytes",
-        load_format="bitsandbytes",
+        # quantization="bitsandbytes",
+        # load_format="bitsandbytes",
         enforce_eager=True
     )
 

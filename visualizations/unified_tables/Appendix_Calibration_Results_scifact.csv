@@ -1,0 +1,28 @@
+Model,Method,AUROC,Threshold,Coverage,Risk,TPR,TNR
+Llama-3.1-8B-Instruct,Ensemble [Logic Check On],0.607,0.547,61.6%,0.637,0.439,0.742
+Llama-3.1-8B-Instruct,MeanTokEnt [Logic Check On],0.603,0.151,47.5%,0.620,0.579,0.598
+Llama-3.1-8B-Instruct,MeanTokEnt,0.568,0.150,46.0%,0.616,0.585,0.556
+Llama-3.1-8B-Instruct,Ensemble,0.568,0.490,40.2%,0.597,0.649,0.510
+Llama-3.1-8B-Instruct,MaxSeqProb [Logic Check On],0.547,0.367,49.1%,0.657,0.538,0.557
+Llama-3.1-8B-Instruct,Perplexity [Logic Check On],0.547,1.076,49.1%,0.657,0.538,0.557
+Llama-3.1-8B-Instruct,LogicalContradiction [Logic Check On],0.531,1.000,84.5%,0.683,0.173,0.889
+Llama-3.1-8B-Instruct,MaxSeqProb,0.513,0.369,49.9%,0.656,0.520,0.541
+Llama-3.1-8B-Instruct,Perplexity,0.513,1.077,49.9%,0.656,0.520,0.541
+Mistral-7B-Instruct-v0.3,MaxSeqProb,0.641,0.147,61.9%,0.437,0.495,0.752
+Mistral-7B-Instruct-v0.3,Perplexity,0.637,1.024,48.6%,0.425,0.615,0.603
+Mistral-7B-Instruct-v0.3,Ensemble [Logic Check On],0.635,0.520,54.8%,0.427,0.558,0.667
+Mistral-7B-Instruct-v0.3,MaxSeqProb [Logic Check On],0.631,0.147,61.8%,0.440,0.486,0.735
+Mistral-7B-Instruct-v0.3,MeanTokEnt,0.626,0.106,50.1%,0.430,0.599,0.616
+Mistral-7B-Instruct-v0.3,Ensemble,0.625,0.458,47.8%,0.424,0.622,0.595
+Mistral-7B-Instruct-v0.3,Perplexity [Logic Check On],0.623,1.024,48.6%,0.425,0.610,0.593
+Mistral-7B-Instruct-v0.3,MeanTokEnt [Logic Check On],0.607,0.075,42.2%,0.413,0.671,0.525
+Mistral-7B-Instruct-v0.3,LogicalContradiction [Logic Check On],0.568,1.000,71.6%,0.482,0.348,0.787
+Qwen3-4B-Instruct-2507,Ensemble [Logic Check On],0.666,0.460,54.1%,0.447,0.570,0.686
+Qwen3-4B-Instruct-2507,LogicalContradiction [Logic Check On],0.620,1.000,62.4%,0.469,0.480,0.759
+Qwen3-4B-Instruct-2507,Ensemble,0.555,0.458,23.4%,0.354,0.853,0.346
+Qwen3-4B-Instruct-2507,MaxSeqProb,0.477,0.002,15.1%,0.492,0.868,0.176
+Qwen3-4B-Instruct-2507,MaxSeqProb [Logic Check On],0.475,0.002,15.1%,0.492,0.868,0.176
+Qwen3-4B-Instruct-2507,Perplexity,0.462,1.000,15.1%,0.492,0.868,0.176
+Qwen3-4B-Instruct-2507,Perplexity [Logic Check On],0.461,1.000,15.1%,0.492,0.868,0.176
+Qwen3-4B-Instruct-2507,MeanTokEnt [Logic Check On],0.449,0.003,15.3%,0.492,0.866,0.178
+Qwen3-4B-Instruct-2507,MeanTokEnt,0.448,0.003,15.3%,0.492,0.866,0.178

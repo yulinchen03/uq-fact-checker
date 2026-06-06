@@ -23,11 +23,11 @@ class LocalLLMClient:
         try:
             self.llm = LLM(
                 model=model_name,
-                gpu_memory_utilization=0.47, # ~21gb vram, 30b model in 4 bit needs ~15gb + overhead + kv cache
-                max_model_len=4096,
+                gpu_memory_utilization=0.47, # ~21gb vram, 8b model in bf16 needs ~16gb + overhead + kv cache
+                max_model_len=8192,
                 trust_remote_code=True,
-                quantization="bitsandbytes",
-                load_format="bitsandbytes",
+                # quantization="bitsandbytes",
+                # load_format="bitsandbytes",
                 enforce_eager=True
             )
             

@@ -6,8 +6,8 @@ experiment_name: "thesis"
 seed: 42
 mode: "always_retrieve" # "always_retrieve" | "never_retrieve" | "uq_aware" | "granular" | "uq_decompose"
 output_format: "label_only"
-logic_eval_method: "discrete"
-check_logic: True
+logic_eval_method: "discrete" # 0/1 scores instead of probability
+check_logic: True # enable ACE
 
 retriever:
   db_path: null
@@ -34,10 +34,9 @@ llm:
   device: "cuda"
   max_model_len: 4096
   max_new_tokens: 256
-  do_sample: False
-  # --- OpenAI-compatible API settings (used only by openai_* modes) ---
-  api_base_url: null                 # e.g., "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
-  api_key_env: "OPENAI_API_KEY"      # e.g., "DASHSCOPE_API_KEY" for Qwen
+  # --- OpenAI-compatible model API settings ---
+  api_base_url: null                 # "https://dashscope-intl.aliyuncs.com/compatible-mode/v1 for Qwen"
+  api_key_env: "OPENAI_API_KEY"      # "DASHSCOPE_API_KEY" for Qwen
 
 prompts:
   rag_short: ${data.rag_short}

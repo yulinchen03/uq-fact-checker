@@ -42,8 +42,6 @@ import sys
 import subprocess
 from pathlib import Path
 
-# --- NEW: Dynamic Path Resolution ---
-# __file__ is scripts/experiments/benchmark_retrieval.py
 project_root = Path(__file__).resolve().parents[2]
 sys.path.append(str(project_root))
 
@@ -97,7 +95,7 @@ def load_claims(dataset: str, split: str, limit: int = 0):
 
 def compute_metrics(retrieved_items: list, gold_ids: list, k_list: list):
     """
-    FIXED: K-Aware Chunk Deduplication.
+    K-Aware Chunk Deduplication.
     Slices the top K chunks first, then extracts unique source_ids to simulate exactly 
     what the LLM context window will see before calculating metrics.
     """
@@ -365,15 +363,14 @@ def main():
     all_metrics: dict = {}
     latencies:   dict = {}
 
-    # --- FIXED: Removed hardcoded db paths, added dynamic routing ---
     experiments = [
         {"name": "1. Gold (Upper Bound)", "type": "gold"},
         
         # Dense Only
         {"name": "2. Dense (BGE-M3)", "type": "dense", "model": "BAAI/bge-m3"},
         {"name": "3. Dense (Qwen3-0.6B)", "type": "dense", "model": "Qwen/Qwen3-Embedding-0.6B"},
-        # {"name": "4. Dense (Qwen3-4B)", "type": "dense", "model": "Qwen/Qwen3-Embedding-4B"},
-        # {"name": "5. Dense (Qwen3-8B)", "type": "dense", "model": "Qwen/Qwen3-Embedding-8B"},
+        {"name": "4. Dense (Qwen3-4B)", "type": "dense", "model": "Qwen/Qwen3-Embedding-4B"},
+        {"name": "5. Dense (Qwen3-8B)", "type": "dense", "model": "Qwen/Qwen3-Embedding-8B"},
 
         # Sparse Only (Simulated by setting alpha=0.0 in the Hybrid Retriever)
         {"name": "6. Sparse Only (BGE-M3)", "type": "hybrid_rrf", "arch": "bgem3", "dense": "BAAI/bge-m3", "alpha": 0.0},
@@ -382,25 +379,25 @@ def main():
         # Hybrid RRF Only (alpha=0.5)
         {"name": "8. Hybrid RRF (BGE-M3)", "type": "hybrid_rrf", "arch": "bgem3", "dense": "BAAI/bge-m3", "alpha": 0.5},
         {"name": "9. Hybrid RRF (Qwen3-0.6B+SPLADE)", "type": "hybrid_rrf", "arch": "qwen-splade", "dense": "Qwen/Qwen3-Embedding-0.6B", "alpha": 0.5},
-        # {"name": "10. Hybrid RRF (Qwen3-4B+SPLADE)", "type": "hybrid_rrf", "arch": "qwen-splade", "dense": "Qwen/Qwen3-Embedding-4B", "alpha": 0.5},
-        # {"name": "11. Hybrid RRF (Qwen3-8B+SPLADE)", "type": "hybrid_rrf", "arch": "qwen-splade", "dense": "Qwen/Qwen3-Embedding-8B", "alpha": 0.5},
+        {"name": "10. Hybrid RRF (Qwen3-4B+SPLADE)", "type": "hybrid_rrf", "arch": "qwen-splade", "dense": "Qwen/Qwen3-Embedding-4B", "alpha": 0.5},
+        {"name": "11. Hybrid RRF (Qwen3-8B+SPLADE)", "type": "hybrid_rrf", "arch": "qwen-splade", "dense": "Qwen/Qwen3-Embedding-8B", "alpha": 0.5},
     ]
 
     # Shared Reranker List
     rerankers = [
-        # ("0.6B", "Qwen/Qwen3-Reranker-0.6B"),
-        # ("4B", "Qwen/Qwen3-Reranker-4B"),
-        # ("8B", "Qwen/Qwen3-Reranker-8B")
+        ("0.6B", "Qwen/Qwen3-Reranker-0.6B"),
+        ("4B", "Qwen/Qwen3-Reranker-4B"),
+        ("8B", "Qwen/Qwen3-Reranker-8B")
     ]
 
     exp_counter = 12
 
     # ── Dynamically Generate Dense + Reranker Matrix ──
     denses = [
-        # ("BGE-M3", "BAAI/bge-m3"),
-        # ("Qwen3-0.6B", "Qwen/Qwen3-Embedding-0.6B"),
-        # ("Qwen3-4B", "Qwen/Qwen3-Embedding-4B"),
-        # ("Qwen3-8B", "Qwen/Qwen3-Embedding-8B")
+        ("BGE-M3", "BAAI/bge-m3"),
+        ("Qwen3-0.6B", "Qwen/Qwen3-Embedding-0.6B"),
+        ("Qwen3-4B", "Qwen/Qwen3-Embedding-4B"),
+        ("Qwen3-8B", "Qwen/Qwen3-Embedding-8B")
     ]
 
     for d_label, dense_mod in denses:
@@ -415,8 +412,8 @@ def main():
 
     # ── Dynamically Generate Sparse + Reranker Matrix ──
     sparses = [
-        # ("BGE-M3 (Sparse)", "bgem3", "BAAI/bge-m3"),
-        # ("SPLADE", "qwen-splade", "Qwen/Qwen3-Embedding-0.6B") 
+        ("BGE-M3 (Sparse)", "bgem3", "BAAI/bge-m3"),
+        ("SPLADE", "qwen-splade", "Qwen/Qwen3-Embedding-0.6B") 
     ]
 
     for s_label, arch, dense_mod in sparses:
@@ -433,10 +430,10 @@ def main():
 
     # ── Dynamically Generate Hybrid + Reranker Matrix ──
     hybrids = [
-        # ("BGE-M3", "bgem3", "BAAI/bge-m3"),
-        # ("Qwen3-0.6B", "qwen-splade", "Qwen/Qwen3-Embedding-0.6B"),
-        # ("Qwen3-4B", "qwen-splade", "Qwen/Qwen3-Embedding-4B"),
-        # ("Qwen3-8B", "qwen-splade", "Qwen/Qwen3-Embedding-8B")
+        ("BGE-M3", "bgem3", "BAAI/bge-m3"),
+        ("Qwen3-0.6B", "qwen-splade", "Qwen/Qwen3-Embedding-0.6B"),
+        ("Qwen3-4B", "qwen-splade", "Qwen/Qwen3-Embedding-4B"),
+        ("Qwen3-8B", "qwen-splade", "Qwen/Qwen3-Embedding-8B")
     ]
 
     for h_label, arch, dense_mod in hybrids:

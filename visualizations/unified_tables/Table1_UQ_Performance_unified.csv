@@ -1,0 +1,37 @@
+Dataset,Model,Method,AUROC,Flag Rate
+quantemp,Llama-3.1-8B-Instruct,MaxSeqProb [Logic Check On],0.675 ± 0.000,55.2% ± 0.0%
+quantemp,Llama-3.1-8B-Instruct,Ensemble [Logic Check On],0.673 ± 0.000,53.0% ± 0.0%
+quantemp,Llama-3.1-8B-Instruct,Perplexity [Logic Check On],0.673 ± 0.000,55.1% ± 0.0%
+quantemp,Llama-3.1-8B-Instruct,Ensemble,0.662 ± 0.000,53.5% ± 0.0%
+quantemp,Llama-3.1-8B-Instruct,MeanTokEnt [Logic Check On],0.641 ± 0.000,56.8% ± 0.0%
+quantemp,Llama-3.1-8B-Instruct,LogicalContradiction [Logic Check On],0.452 ± 0.000,0.0% ± 0.0%
+quantemp,Qwen3-4B-Instruct-2507,Ensemble [Logic Check On],0.647 ± 0.000,51.4% ± 0.0%
+quantemp,Qwen3-4B-Instruct-2507,Ensemble,0.645 ± 0.000,55.9% ± 0.0%
+quantemp,Qwen3-4B-Instruct-2507,MaxSeqProb [Logic Check On],0.644 ± 0.000,59.4% ± 0.0%
+quantemp,Qwen3-4B-Instruct-2507,Perplexity [Logic Check On],0.643 ± 0.000,59.4% ± 0.0%
+quantemp,Qwen3-4B-Instruct-2507,MeanTokEnt [Logic Check On],0.642 ± 0.000,59.4% ± 0.0%
+quantemp,Qwen3-4B-Instruct-2507,LogicalContradiction [Logic Check On],0.473 ± 0.000,0.0% ± 0.0%
+quantemp,Mistral-7B-Instruct-v0.3,Ensemble,0.674 ± 0.000,64.3% ± 0.0%
+quantemp,Mistral-7B-Instruct-v0.3,Ensemble [Logic Check On],0.673 ± 0.000,52.4% ± 0.0%
+quantemp,Mistral-7B-Instruct-v0.3,MaxSeqProb [Logic Check On],0.668 ± 0.000,65.0% ± 0.0%
+quantemp,Mistral-7B-Instruct-v0.3,Perplexity [Logic Check On],0.631 ± 0.000,69.3% ± 0.0%
+quantemp,Mistral-7B-Instruct-v0.3,MeanTokEnt [Logic Check On],0.588 ± 0.000,71.7% ± 0.0%
+quantemp,Mistral-7B-Instruct-v0.3,LogicalContradiction [Logic Check On],0.416 ± 0.000,0.0% ± 0.0%
+scifact,Llama-3.1-8B-Instruct,Ensemble,0.656 ± 0.000,65.7% ± 0.0%
+scifact,Llama-3.1-8B-Instruct,Ensemble [Logic Check On],0.638 ± 0.000,45.7% ± 0.0%
+scifact,Llama-3.1-8B-Instruct,MeanTokEnt [Logic Check On],0.635 ± 0.000,56.3% ± 0.0%
+scifact,Llama-3.1-8B-Instruct,MaxSeqProb [Logic Check On],0.545 ± 0.000,53.3% ± 0.0%
+scifact,Llama-3.1-8B-Instruct,Perplexity [Logic Check On],0.545 ± 0.000,53.3% ± 0.0%
+scifact,Llama-3.1-8B-Instruct,LogicalContradiction [Logic Check On],0.529 ± 0.000,17.7% ± 0.0%
+scifact,Qwen3-4B-Instruct-2507,Ensemble [Logic Check On],0.665 ± 0.000,42.0% ± 0.0%
+scifact,Qwen3-4B-Instruct-2507,LogicalContradiction [Logic Check On],0.630 ± 0.000,36.3% ± 0.0%
+scifact,Qwen3-4B-Instruct-2507,Ensemble,0.581 ± 0.000,76.0% ± 0.0%
+scifact,Qwen3-4B-Instruct-2507,MeanTokEnt [Logic Check On],0.415 ± 0.000,84.3% ± 0.0%
+scifact,Qwen3-4B-Instruct-2507,MaxSeqProb [Logic Check On],0.414 ± 0.000,85.0% ± 0.0%
+scifact,Qwen3-4B-Instruct-2507,Perplexity [Logic Check On],0.405 ± 0.000,85.0% ± 0.0%
+scifact,Mistral-7B-Instruct-v0.3,Ensemble [Logic Check On],0.651 ± 0.000,43.3% ± 0.0%
+scifact,Mistral-7B-Instruct-v0.3,MaxSeqProb [Logic Check On],0.623 ± 0.000,35.0% ± 0.0%
+scifact,Mistral-7B-Instruct-v0.3,MeanTokEnt [Logic Check On],0.591 ± 0.000,56.3% ± 0.0%
+scifact,Mistral-7B-Instruct-v0.3,LogicalContradiction [Logic Check On],0.581 ± 0.000,28.3% ± 0.0%
+scifact,Mistral-7B-Instruct-v0.3,Ensemble,0.574 ± 0.000,51.0% ± 0.0%
+scifact,Mistral-7B-Instruct-v0.3,Perplexity [Logic Check On],0.553 ± 0.000,51.0% ± 0.0%

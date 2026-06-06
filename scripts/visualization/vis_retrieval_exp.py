@@ -65,7 +65,7 @@ def clean_model_name(name: str) -> str:
 def main():
     args = parse_args()
 
-    # --- FIXED: Use dynamic pathing to locate the results folder ---
+    # Use dynamic pathing to locate the results folder
     json_path = project_root / "run_results" / "benchmarks" / args.save_results_folder / "retrieval_exp.json"
     
     if not json_path.exists():
@@ -80,7 +80,7 @@ def main():
         print("❌ Error: No methods found in JSON.")
         return
 
-    # --- FIXED: Handle multiple K values dynamically ---
+    # Handle multiple K values dynamically
     available_ks = data.get("top_k", [3])
     if not isinstance(available_ks, list):
         available_ks = [available_ks]

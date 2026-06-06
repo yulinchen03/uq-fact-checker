@@ -279,10 +279,10 @@ class QwenReranker:
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side="left")
         self.model = LLM(model=model_name, 
                             enable_prefix_caching=True, 
-                            gpu_memory_utilization=0.23, # ~10gb VRAM, 4b model in bf16 needs ~8gb + kv cache
+                            gpu_memory_utilization=0.22, # ~10gb VRAM, 4b model in bf16 needs ~8gb + kv cache
                             max_model_len=self.max_length,
                             trust_remote_code=True,
-                            # quantization="bitsandbytes",
+                            # quantization="bitsandbytes", # quantization disabled to preserve accuracy
                             # load_format="bitsandbytes",
                             enforce_eager=True)
 

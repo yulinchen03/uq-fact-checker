@@ -10,7 +10,6 @@ def get_best_model_examples(dataset, split="test"):
     files = glob.glob(search_path)
     
     if not files:
-        # Fallback to val if test doesn't exist (e.g. scifact calibration)
         search_path = str(PROJECT_ROOT / "results_dump" / "final" / dataset / "*" / "uq_aware" / "Ensemble" / "results_val_label_only_logic_discrete.jsonl")
         files = glob.glob(search_path)
         if not files:

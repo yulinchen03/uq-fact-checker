@@ -25,8 +25,6 @@ echo "=========================================================="
 echo "🚀 Populating DB for Dataset: $DATASET"
 echo "=========================================================="
 
-# HF_HUB_OFFLINE is set to 0 here to allow downloading embedding models 
-# if they are not already in the cache.
 apptainer exec --nv -C \
     --bind "${PROJECT}:/workspace" \
     --bind "${HF_CACHE}:/hf_cache" \

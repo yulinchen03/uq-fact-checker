@@ -44,10 +44,6 @@ def clean_label(label):
     return " ".join(lbl.split())
 
 
-# ==========================================
-# REFACTORED HELPER FUNCTIONS
-# ==========================================
-
 def resolve_paths(cfg, config, model_name, output_format):
     """Constructs and validates all file paths needed for analysis."""
     seed = cfg.get("seed", 42)
@@ -210,10 +206,6 @@ def print_performance_report(ds, computed, auroc, allowed_labels, save_path):
     print(classification_report(ds["y_true"], ds["y_pred"], target_names=allowed_labels, zero_division=0))
     print(f"\nStats successfully saved to: {save_path.relative_to(ROOT_DIR)}")
 
-
-# ==========================================
-# ORCHESTRATOR 
-# ==========================================
 
 @hydra.main(version_base=None, config_path="../../config", config_name="config")
 def analyze_results(cfg: DictConfig):

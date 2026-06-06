@@ -17,13 +17,12 @@ HF_CACHE="/tudelft.net/staff-umbrella/YC Thesis Drive/Thesis-Project/.hf_cache"
 
 mkdir -p "${PROJECT}/logs"
 
-# --- Create unique cache folders for THIS specific calibration task! ---
+# --- Create unique cache folders for THIS specific calibration task ---
 TASK_CACHE="${PROJECT}/.global_cache/calib_job_${SLURM_ARRAY_JOB_ID}_task_${SLURM_ARRAY_TASK_ID}"
 LOCAL_CACHE="${TMPDIR}/torchinductor_${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
 mkdir -p "${TASK_CACHE}"
 mkdir -p "${LOCAL_CACHE}"
 
-# --- ORPHAN STATE PREVENTION: Graceful Teardown Trap ---
 cleanup() {
     echo -e "\n🛑 Caught exit signal or script ended. Executing graceful teardown..."
     

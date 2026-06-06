@@ -6,7 +6,6 @@ from transformers import AutoTokenizer
 from tqdm import tqdm
 import inquirer
 
-# --- Dynamic Path Resolution ---
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT_DIR / "data"
 
@@ -23,7 +22,6 @@ def get_config():
                       message="Select the dataset to analyze",
                       choices=['scifact', 'quantemp']),
         
-        # Uses the callable to dynamically populate choices based on 'dataset'
         inquirer.List('filename',
                       message="Which stage of the corpus do you want to analyze?",
                       choices=get_corpus_files),
@@ -35,7 +33,6 @@ def get_config():
     
     answers = inquirer.prompt(questions)
     
-    # Safety catch if they exited or no files were found
     if not answers or "NO FILES FOUND" in answers['filename']:
         return None
         
@@ -84,25 +81,20 @@ def profile_corpus_tokens(corpus_file_path: Path, model_name: str):
     lengths = []
     
     for doc in tqdm(documents, desc="Tokenizing Corpus"):
-        # Safely extract title (if it exists yet)
         title = doc.get("title", "")
         
-        # Safely extract the main body
         body_data = doc.get("text", "") or doc.get("content", "") or doc.get("abstract", "")
         
-        # Handle SciFact's list-of-sentences format safely
         if isinstance(body_data, list):
             body = " ".join([str(sentence) for sentence in body_data])
         else:
             body = str(body_data)
             
-        # Combine them just like the Aggregator does
         if title:
             full_text = f"Title: {title}\nContent: {body}".strip()
         else:
             full_text = body.strip()
         
-        # Count tokens
         if full_text:
             token_count = len(tokenizer.encode(full_text, add_special_tokens=False))
             lengths.append(token_count)

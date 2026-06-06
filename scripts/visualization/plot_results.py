@@ -43,9 +43,6 @@ def shorten_name(name, logic_flag):
             
     return base_name
 
-# ==========================================
-# DATA EXTRACTION (SUMMARY & JSONL)
-# ==========================================
 
 def extract_experiment_data(base_dir):
     records = []
@@ -155,10 +152,10 @@ def extract_uq_jsonl_data(base_dir):
 
 
 def discover_final_runs(project_root):
-    """Finds all results_dump/final_* directories, sorted numerically."""
+    """Finds all results_dump/seed_* directories, sorted numerically."""
     results_dump = project_root / "results_dump"
     runs = sorted(
-        [d for d in results_dump.iterdir() if d.is_dir() and d.name.startswith("final")],
+        [d for d in results_dump.iterdir() if d.is_dir() and (d.name.startswith("seed") or d.name.startswith("final"))],
         key=lambda p: p.name
     )
     print(f"Discovered {len(runs)} final runs: {[r.name for r in runs]}")
@@ -227,9 +224,6 @@ def average_records_across_runs(all_run_records):
     averaged.sort(key=lambda x: (sort_key(x)[0], sort_key(x)[1]))
     return averaged
 
-# ==========================================
-# TABLE EXPORT (NEW)
-# ==========================================
 
 def extract_calibration_data(base_dir, dataset_name, model_name):
     """Extracts metrics specifically from the CALIBRATION_SUMMARY.md file."""

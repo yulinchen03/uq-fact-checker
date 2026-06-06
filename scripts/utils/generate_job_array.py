@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-SEEDS = [42, 1, 2, 3, 4]
+SEEDS = [42, 1, 2]
 MODELS = [
     "Qwen/Qwen3-4B-Instruct-2507",
     "mistralai/Mistral-7B-Instruct-v0.3",
@@ -50,7 +50,6 @@ OPENAI_BASELINES = [
     "openai_always_retrieve"
 ]
 
-# Shared constants for output format
 OUTPUT_FORMATS = [
     # "--output_format full_response",
     "--output_format label_only"
@@ -120,7 +119,6 @@ def main():
                     continue  # Closed-source models don't support UQ, so skip the rest
 
                 # 1. Generate Baseline Evaluation Jobs
-                # Baselines do not use UQ, so we only generate them ONCE per dataset/model!
                 for mode in BASELINES:
                     cmd_eval = (f"--run_type evaluate --dataset {dataset_name} "
                                 f"--model {model} --mode {mode} --test_split {test_split} "
@@ -136,7 +134,6 @@ def main():
                     is_logic_on = logic["logic_on"]
 
                     for fmt in OUTPUT_FORMATS:
-                        # Calibration Jobs
                         cmd_calib = (f"--run_type calibrate --dataset {dataset_name} "
                                      f"--calibration_split {calib_split} --model {model} "
                                      f"--seed {seed} "
@@ -151,7 +148,6 @@ def main():
                             continue
 
                         # When logic is OFF, only run Ensemble as a comparison baseline.
-                        # All other methods are only evaluated with logic ON.
                         if not is_logic_on and uq != "Ensemble":
                             continue
 

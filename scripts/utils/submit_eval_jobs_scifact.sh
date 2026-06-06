@@ -17,11 +17,10 @@ HF_CACHE="/tudelft.net/staff-umbrella/YC Thesis Drive/Thesis-Project/.hf_cache"
 
 mkdir -p "${PROJECT}/logs"
 
-# --- Create a unique cache folder for THIS specific evaluation task! ---
+# --- Create a unique cache folder for THIS specific evaluation task ---
 TASK_CACHE="${PROJECT}/.global_cache/eval_task_${SLURM_ARRAY_TASK_ID}"
 mkdir -p "${TASK_CACHE}"
 
-# --- ORPHAN STATE PREVENTION: Graceful Teardown Trap ---
 cleanup() {
     echo -e "\n🛑 Caught exit signal or script ended. Executing graceful teardown..."
     
@@ -74,5 +73,3 @@ apptainer exec --nv -C \
 # --- PROGRESS LOGGING ---
 # Appends the SLURM job ID and arguments to progress.txt upon job completion.
 printf '{"job_id": "%s", "array_task_id": "%s", "args": "%s"}\n' "${SLURM_JOB_ID}" "${SLURM_ARRAY_TASK_ID}" "${ARGS}" >> "${PROJECT}/progress.txt"
-
-# Note: Manual `rm -rf` was removed here because the `trap` function handles it automatically!

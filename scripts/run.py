@@ -170,7 +170,7 @@ def main(cfg: DictConfig):
 
     open(final_file, 'w').close()
     
-    # Execution Loop 
+    # Pipeline execution loop
     with open(final_file, 'w') as f_out:
         for i, sample in enumerate(tqdm(dataset, desc=f"Running {cfg.data.dataset_name}|{cfg.data.split}|{cfg.mode}|{output_format}")):
             sample.mode = cfg.mode 
