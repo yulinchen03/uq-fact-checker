@@ -327,7 +327,7 @@ class QwenReranker:
             batch_prompts.append({"prompt_token_ids": input_ids})
 
         # Ask for top 20 logprobs to ensure we capture the probabilities of 'yes' and 'no'
-        sampling_params = SamplingParams(max_tokens=1, temperature=0.5, logprobs=20)
+        sampling_params = SamplingParams(max_tokens=1, temperature=0.3, logprobs=20)
         
         outputs = self.model.generate(batch_prompts, sampling_params=sampling_params, use_tqdm=False)
 

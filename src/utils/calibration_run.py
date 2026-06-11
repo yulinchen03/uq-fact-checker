@@ -109,7 +109,7 @@ def main():
     )
 
     # Shared generation config
-    GEN_TEMPERATURE = 0.5
+    GEN_TEMPERATURE = 0.3
     GEN_STOP_TOKENS = ["<|im_end|>", "<|eot_id|>", "```", "<|im_start|>", "<|start_header_id|>"]
 
     if args.output_format == "label_only":

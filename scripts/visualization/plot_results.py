@@ -153,7 +153,9 @@ def extract_uq_jsonl_data(base_dir):
 
 def discover_final_runs(project_root):
     """Finds all results_dump/seed_* directories, sorted numerically."""
-    results_dump = project_root / "results_dump"
+    # results_dump = project_root / "results_dump" / "temp0.3"
+    results_dump = project_root / "results_dump" / "temp0.5"
+
     runs = sorted(
         [d for d in results_dump.iterdir() if d.is_dir() and (d.name.startswith("seed") or d.name.startswith("final"))],
         key=lambda p: p.name
@@ -375,6 +377,28 @@ def export_summary_tables(records, tables_out_dir, dataset_name, model_name):
         print(table1.drop(columns=['Dataset', 'Model']).to_markdown(index=False, floatfmt=".3f"))
 
     # ---------------------------------------------------------
+    # Compute relative % differences vs Always Retrieve
+    # ---------------------------------------------------------
+    ar_rows = df[df['Mode'] == 'always_retrieve']
+    if not ar_rows.empty:
+        ar_bal_acc = ar_rows['Balanced_Accuracy'].values[0]
+        ar_tokens = ar_rows['Total_Tokens'].values[0]
+
+        df['Δ Bal.Acc. (%)'] = df['Balanced_Accuracy'].apply(
+            lambda x: ((x - ar_bal_acc) / ar_bal_acc) * 100 if ar_bal_acc else np.nan)
+        df['Δ Tokens (%)'] = df['Total_Tokens'].apply(
+            lambda x: ((x - ar_tokens) / ar_tokens) * 100 if ar_tokens else np.nan)
+    else:
+        df['Δ Bal.Acc. (%)'] = np.nan
+        df['Δ Tokens (%)'] = np.nan
+
+    # Format the delta columns
+    df['Δ Bal.Acc. (%)'] = df['Δ Bal.Acc. (%)'].apply(
+        lambda x: f"{x:+.1f}%" if pd.notnull(x) else "N/A")
+    df['Δ Tokens (%)'] = df['Δ Tokens (%)'].apply(
+        lambda x: f"{x:+.1f}%" if pd.notnull(x) else "N/A")
+
+    # ---------------------------------------------------------
     # TABLE 2: End-to-End Performance & Efficiency
     # ---------------------------------------------------------
     if multi_run:
@@ -384,7 +408,7 @@ def export_summary_tables(records, tables_out_dir, dataset_name, model_name):
         df['Latency_Fmt'] = df.apply(lambda r: _fmt_mean_std(r['Latency_Sec'], r.get('Latency_Sec_std'), fmt=".2f", suffix="s"), axis=1)
         df['Tokens_Fmt'] = df.apply(lambda r: _fmt_mean_std(r['Total_Tokens'], r.get('Total_Tokens_std'), fmt=".0f"), axis=1)
 
-        cols_to_keep = ['Method', 'Bal_Acc_Fmt', 'Flag_Rate_Fmt', 'Tokens_Fmt', 'LLM_Calls_Fmt', 'Ret_Calls_Fmt', 'Latency_Fmt']
+        cols_to_keep = ['Method', 'Bal_Acc_Fmt', 'Flag_Rate_Fmt', 'Tokens_Fmt', 'LLM_Calls_Fmt', 'Ret_Calls_Fmt', 'Latency_Fmt', 'Δ Bal.Acc. (%)', 'Δ Tokens (%)']
         table2 = df[cols_to_keep].copy()
         table2.rename(columns={
             'Bal_Acc_Fmt': 'Balanced_Accuracy', 'Flag_Rate_Fmt': 'Flag Rate',
@@ -392,7 +416,7 @@ def export_summary_tables(records, tables_out_dir, dataset_name, model_name):
             'Ret_Calls_Fmt': 'Retrieval_Calls', 'Latency_Fmt': 'Latency_Sec'
         }, inplace=True)
     else:
-        cols_to_keep = ['Method', 'Balanced_Accuracy', 'Flag_Rate_Fmt', 'Total_Tokens', 'LLM_Calls', 'Retrieval_Calls', 'Latency_Sec']
+        cols_to_keep = ['Method', 'Balanced_Accuracy', 'Flag_Rate_Fmt', 'Total_Tokens', 'LLM_Calls', 'Retrieval_Calls', 'Latency_Sec', 'Δ Bal.Acc. (%)', 'Δ Tokens (%)']
         table2 = df[cols_to_keep].copy()
         table2.rename(columns={'Flag_Rate_Fmt': 'Flag Rate'}, inplace=True)
         table2['Balanced_Accuracy'] = table2['Balanced_Accuracy'].apply(lambda x: f"{x:.3f}")
@@ -419,7 +443,7 @@ def export_summary_tables(records, tables_out_dir, dataset_name, model_name):
     
     return table1, table2
 
-def export_unified_calibration_table(all_calib_records, out_dir, dataset_name):
+def export_unified_calibration_table(all_calib_records, out_dir, dataset_name, n_runs=1):
     """Generates a single unified calibration table across all models for the appendix."""
     if not all_calib_records:
         return
@@ -431,23 +455,87 @@ def export_unified_calibration_table(all_calib_records, out_dir, dataset_name):
     
     # Sort logically by Model, then by AUROC descending
     df = df.sort_values(by=['Model', 'AUROC'], ascending=[True, False])
-    
-    # Format numbers for clean paper reading
-    df['AUROC'] = df['AUROC'].apply(lambda x: f"{x:.3f}")
-    df['Threshold'] = df['Threshold'].apply(lambda x: f"{x:.3f}" if isinstance(x, (int, float)) else x)
-    df['Coverage'] = df['Coverage'].apply(lambda x: f"{x * 100:.1f}%" if x <= 1.0 else f"{x:.1f}%")
-    df['Risk'] = df['Risk'].apply(lambda x: f"{x:.3f}")
-    df['TPR'] = df['TPR'].apply(lambda x: f"{x:.3f}")
-    df['TNR'] = df['TNR'].apply(lambda x: f"{x:.3f}")
 
+    multi_run = 'AUROC_std' in df.columns and n_runs > 1
+
+    if multi_run:
+        df['AUROC'] = df.apply(lambda r: _fmt_mean_std(r['AUROC'], r.get('AUROC_std')), axis=1)
+        df['Threshold'] = df.apply(
+            lambda r: _fmt_mean_std(r['Threshold'], r.get('Threshold_std'))
+            if r['Threshold'] != float('inf') else 'inf', axis=1)
+        df['Coverage'] = df.apply(
+            lambda r: _fmt_mean_std(r['Coverage'], r.get('Coverage_std'), fmt=".1f", as_pct=True), axis=1)
+        df['Risk'] = df.apply(lambda r: _fmt_mean_std(r['Risk'], r.get('Risk_std')), axis=1)
+        df['TPR'] = df.apply(lambda r: _fmt_mean_std(r['TPR'], r.get('TPR_std')), axis=1)
+        df['TNR'] = df.apply(lambda r: _fmt_mean_std(r['TNR'], r.get('TNR_std')), axis=1)
+        # Drop the _std and n_runs columns from the output
+        std_cols = [c for c in df.columns if c.endswith('_std')]
+        df = df.drop(columns=std_cols + (['n_runs'] if 'n_runs' in df.columns else []))
+    else:
+        # Format numbers for clean paper reading (original behavior)
+        df['AUROC'] = df['AUROC'].apply(lambda x: f"{x:.3f}")
+        df['Threshold'] = df['Threshold'].apply(lambda x: f"{x:.3f}" if isinstance(x, (int, float)) else x)
+        df['Coverage'] = df['Coverage'].apply(lambda x: f"{x * 100:.1f}%" if x <= 1.0 else f"{x:.1f}%")
+        df['Risk'] = df['Risk'].apply(lambda x: f"{x:.3f}")
+        df['TPR'] = df['TPR'].apply(lambda x: f"{x:.3f}")
+        df['TNR'] = df['TNR'].apply(lambda x: f"{x:.3f}")
+
+    run_tag = f" (n={n_runs} runs)" if multi_run else ""
     filename = f"Appendix_Calibration_Results_{dataset_name}.csv"
     df.to_csv(out_dir / filename, index=False)
 
     print("\n" + "="*90)
-    print(f"APPENDIX TABLE: Unified Calibration Results | {dataset_name.capitalize()}")
+    print(f"APPENDIX TABLE: Unified Calibration Results{run_tag} | {dataset_name.capitalize()}")
     print("="*90)
     print(df.to_markdown(index=False))
     print("\n")
+
+
+def average_calibration_across_runs(all_runs_calib_records):
+    """Averages calibration metrics across multiple seed runs.
+
+    Args:
+        all_runs_calib_records: list of lists, each inner list is the output of
+                                 extract_calibration_data for one seed run.
+
+    Returns:
+        List of averaged calibration record dicts with '_std' fields for each numeric metric.
+    """
+    if not all_runs_calib_records:
+        return []
+
+    CALIB_NUMERIC_FIELDS = ['AUROC', 'Threshold', 'Coverage', 'Risk', 'TPR', 'TNR']
+
+    grouped = defaultdict(list)
+    for run_records in all_runs_calib_records:
+        for r in run_records:
+            key = (r['Model'], r['Method'])
+            grouped[key].append(r)
+
+    averaged = []
+    for (model, method), records_list in grouped.items():
+        row = {'Model': model, 'Method': method}
+        for field in CALIB_NUMERIC_FIELDS:
+            vals = [r[field] for r in records_list if r.get(field) is not None]
+            # Filter out inf values for threshold averaging
+            if field == 'Threshold':
+                finite_vals = [v for v in vals if v != float('inf')]
+                if finite_vals:
+                    row[field] = float(np.mean(finite_vals))
+                    row[f'{field}_std'] = float(np.std(finite_vals))
+                else:
+                    row[field] = float('inf')
+                    row[f'{field}_std'] = None
+            elif vals:
+                row[field] = float(np.mean(vals))
+                row[f'{field}_std'] = float(np.std(vals))
+            else:
+                row[field] = None
+                row[f'{field}_std'] = None
+        row['n_runs'] = len(records_list)
+        averaged.append(row)
+
+    return averaged
 
 
 # ==========================================
@@ -792,8 +880,9 @@ def _inject_flag_rates(records, uq_data):
 def main():
     datasets = ["quantemp", "scifact"]
     models = ["Llama-3.1-8B-Instruct", "Qwen3-4B-Instruct-2507", "Mistral-7B-Instruct-v0.3"]
+    # vis_dir = "vis_run_0.3"
+    vis_dir = "vis_run_0.5"
 
-    # Resolve project root (two levels up from scripts/visualization/)
     PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
     # Discover all final_* run directories
@@ -806,18 +895,19 @@ def main():
     valid_runs = [r for r in final_runs if any(r.iterdir())]
     print(f"Using {len(valid_runs)} non-empty runs: {[r.name for r in valid_runs]}")
 
-    unified_tables_dir = PROJECT_ROOT / "visualizations" / "unified_tables"
+    print(f"Extracting from path: {PROJECT_ROOT / vis_dir}")
+    unified_tables_dir = PROJECT_ROOT / vis_dir / "unified_tables"
     unified_tables_dir.mkdir(parents=True, exist_ok=True)
     
     all_table1_records = []
     all_table2_records = []
 
     for dataset in datasets:
-        all_calib_records = []
+        all_runs_calib_records = []  # list of lists — one per seed run
         print(f"\nProcessing dataset: {dataset}")
         for model in models:
             print(f"  Processing model: {model}")
-            out_dir = PROJECT_ROOT / "visualizations" / dataset / model
+            out_dir = PROJECT_ROOT / vis_dir / dataset / model
             out_dir.mkdir(parents=True, exist_ok=True)
 
             # --- Collect records from each run ---
@@ -844,11 +934,10 @@ def main():
                     first_run_records = records
                     first_run_uq_data = uq_data
 
-                # Calibration data (use first run only — calibration doesn't vary across runs)
-                if not all_calib_records or run_dir == valid_runs[0]:
-                    calib_records = extract_calibration_data(target_dir, dataset, model)
-                    if calib_records and run_dir == valid_runs[0]:
-                        all_calib_records.extend(calib_records)
+                # Calibration data — collect from all runs for averaging
+                calib_records = extract_calibration_data(target_dir, dataset, model)
+                if calib_records:
+                    all_runs_calib_records.append(calib_records)
 
             if not all_run_records:
                 print("    No summary records found across any run. Skipping.")
@@ -892,9 +981,11 @@ def main():
             print(f"    ✅ All visualizations saved to: {out_dir}")
             print(f"    ✅ All tables saved to: {unified_tables_dir}")
 
-        if all_calib_records:
-            print(f"Generating Unified Calibration Appendix Table...")
-            export_unified_calibration_table(all_calib_records, unified_tables_dir, dataset)
+        if all_runs_calib_records:
+            averaged_calib = average_calibration_across_runs(all_runs_calib_records)
+            n_calib_runs = len(all_runs_calib_records)
+            print(f"Generating Unified Calibration Appendix Table (averaged over {n_calib_runs} runs)...")
+            export_unified_calibration_table(averaged_calib, unified_tables_dir, dataset, n_runs=n_calib_runs)
             print(f"✅ Calibration Appendix table saved to: {unified_tables_dir}")
             
     if all_table1_records:

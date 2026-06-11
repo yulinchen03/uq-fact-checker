@@ -21,7 +21,7 @@ class UQDecomposePipeline(PipelineComponent):
         self.dataset = cfg.data.dataset_name.lower()
 
         if model and tokenizer:
-            GEN_TEMPERATURE = 0.5
+            GEN_TEMPERATURE = 0.3
             GEN_STOP_TOKENS = ["<|im_end|>", "<|eot_id|>", "```", "<|im_start|>", "<|start_header_id|>"]
 
             if self.output_format == "label_only":

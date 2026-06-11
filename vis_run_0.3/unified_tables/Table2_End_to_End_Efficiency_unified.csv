@@ -1,0 +1,55 @@
+Dataset,Model,Method,Balanced_Accuracy,Flag Rate,Total_Tokens,LLM_Calls,Retrieval_Calls,Latency_Sec,Δ Bal.Acc. (%),Δ Tokens (%)
+quantemp,Llama-3.1-8B-Instruct,Parametric (0% RAG),0.402 ± 0.000,0.0% ± 0.0%,202 ± 0,1.00 ± 0.00,0.00 ± 0.00,0.09s ± 0.00s,-33.9%,-83.8%
+quantemp,Llama-3.1-8B-Instruct,Always Retrieve,0.607 ± 0.000,100.0% ± 0.0%,1245 ± 0,1.00 ± 0.00,1.00 ± 0.00,2.71s ± 0.02s,+0.0%,+0.0%
+quantemp,Llama-3.1-8B-Instruct,Granular,0.547 ± 0.001,0.0% ± 0.0%,4512 ± 1,4.25 ± 0.00,3.25 ± 0.00,9.75s ± 0.05s,-10.0%,+262.4%
+quantemp,Llama-3.1-8B-Instruct,Ensemble [Logic Check On],0.554 ± 0.004,51.6% ± 1.0%,1187 ± 13,3.51 ± 0.01,0.51 ± 0.01,2.41s ± 0.03s,-8.8%,-4.7%
+quantemp,Llama-3.1-8B-Instruct,MeanTokEnt [Logic Check On],0.552 ± 0.000,50.9% ± 0.0%,839 ± 0,1.51 ± 0.00,0.51 ± 0.00,1.49s ± 0.02s,-9.2%,-32.6%
+quantemp,Llama-3.1-8B-Instruct,MaxSeqProb [Logic Check On],0.544 ± 0.000,46.5% ± 0.0%,783 ± 0,1.47 ± 0.00,0.47 ± 0.00,1.39s ± 0.02s,-10.4%,-37.1%
+quantemp,Llama-3.1-8B-Instruct,Perplexity [Logic Check On],0.544 ± 0.000,46.5% ± 0.0%,783 ± 0,1.47 ± 0.00,0.47 ± 0.00,1.38s ± 0.01s,-10.4%,-37.1%
+quantemp,Llama-3.1-8B-Instruct,Ensemble,0.543 ± 0.001,46.9% ± 0.2%,788 ± 2,1.47 ± 0.00,0.47 ± 0.00,1.38s ± 0.01s,-10.7%,-36.7%
+quantemp,Llama-3.1-8B-Instruct,LogicalContradiction [Logic Check On],0.417 ± 0.000,0.0% ± 0.0%,541 ± 0,3.00 ± 0.00,0.00 ± 0.00,1.02s ± 0.01s,-31.4%,-56.5%
+quantemp,Qwen3-4B-Instruct-2507,Parametric (0% RAG),0.368 ± 0.000,0.0% ± 0.0%,175 ± 0,1.00 ± 0.00,0.00 ± 0.00,0.06s ± 0.00s,-38.4%,-86.2%
+quantemp,Qwen3-4B-Instruct-2507,Always Retrieve,0.597 ± 0.002,100.0% ± 0.0%,1264 ± 0,1.00 ± 0.00,1.00 ± 0.00,2.61s ± 0.02s,+0.0%,+0.0%
+quantemp,Qwen3-4B-Instruct-2507,Granular,0.513 ± 0.003,0.0% ± 0.0%,3652 ± 8,3.55 ± 0.00,2.55 ± 0.00,7.31s ± 0.03s,-14.1%,+188.9%
+quantemp,Qwen3-4B-Instruct-2507,Perplexity [Logic Check On],0.514 ± 0.002,49.5% ± 0.0%,811 ± 1,1.50 ± 0.00,0.50 ± 0.00,1.39s ± 0.01s,-13.8%,-35.9%
+quantemp,Qwen3-4B-Instruct-2507,MeanTokEnt [Logic Check On],0.513 ± 0.000,49.6% ± 0.0%,812 ± 0,1.50 ± 0.00,0.50 ± 0.00,1.37s ± 0.00s,-14.0%,-35.8%
+quantemp,Qwen3-4B-Instruct-2507,MaxSeqProb [Logic Check On],0.512 ± 0.000,49.6% ± 0.0%,813 ± 0,1.50 ± 0.00,0.50 ± 0.00,1.41s ± 0.01s,-14.2%,-35.7%
+quantemp,Qwen3-4B-Instruct-2507,Ensemble,0.511 ± 0.002,49.0% ± 1.0%,804 ± 12,1.49 ± 0.01,0.49 ± 0.01,1.38s ± 0.03s,-14.4%,-36.4%
+quantemp,Qwen3-4B-Instruct-2507,Ensemble [Logic Check On],0.510 ± 0.006,47.6% ± 2.2%,1081 ± 27,3.48 ± 0.02,0.48 ± 0.02,1.97s ± 0.05s,-14.6%,-14.5%
+quantemp,Qwen3-4B-Instruct-2507,LogicalContradiction [Logic Check On],0.365 ± 0.000,0.0% ± 0.0%,470 ± 0,3.00 ± 0.00,0.00 ± 0.00,0.69s ± 0.00s,-38.9%,-62.8%
+quantemp,Mistral-7B-Instruct-v0.3,Parametric (0% RAG),0.450 ± 0.000,0.0% ± 0.0%,246 ± 0,1.00 ± 0.00,0.00 ± 0.00,0.11s ± 0.00s,-34.4%,-83.2%
+quantemp,Mistral-7B-Instruct-v0.3,Always Retrieve,0.685 ± 0.002,100.0% ± 0.0%,1468 ± 0,1.00 ± 0.00,1.00 ± 0.00,2.74s ± 0.02s,+0.0%,+0.0%
+quantemp,Mistral-7B-Instruct-v0.3,Granular,0.596 ± 0.006,0.0% ± 0.0%,5341 ± 47,4.19 ± 0.03,3.19 ± 0.03,10.02s ± 0.12s,-13.0%,+263.9%
+quantemp,Mistral-7B-Instruct-v0.3,MeanTokEnt [Logic Check On],0.668 ± 0.001,77.7% ± 1.1%,1394 ± 16,1.78 ± 0.01,0.78 ± 0.01,2.29s ± 0.06s,-2.5%,-5.0%
+quantemp,Mistral-7B-Instruct-v0.3,Perplexity [Logic Check On],0.660 ± 0.002,72.0% ± 0.9%,1311 ± 13,1.72 ± 0.01,0.72 ± 0.01,2.10s ± 0.03s,-3.7%,-10.7%
+quantemp,Mistral-7B-Instruct-v0.3,MaxSeqProb [Logic Check On],0.649 ± 0.000,65.4% ± 0.0%,1214 ± 0,1.65 ± 0.00,0.65 ± 0.00,1.93s ± 0.04s,-5.3%,-17.3%
+quantemp,Mistral-7B-Instruct-v0.3,Ensemble [Logic Check On],0.624 ± 0.005,57.8% ± 1.0%,1493 ± 13,3.58 ± 0.01,0.58 ± 0.01,2.79s ± 0.03s,-9.0%,+1.7%
+quantemp,Mistral-7B-Instruct-v0.3,Ensemble,0.604 ± 0.028,48.1% ± 9.4%,954 ± 140,1.48 ± 0.09,0.48 ± 0.09,1.46s ± 0.24s,-11.8%,-35.0%
+quantemp,Mistral-7B-Instruct-v0.3,LogicalContradiction [Logic Check On],0.460 ± 0.002,0.0% ± 0.0%,638 ± 0,3.00 ± 0.00,0.00 ± 0.00,1.21s ± 0.01s,-32.9%,-56.5%
+scifact,Llama-3.1-8B-Instruct,Parametric (0% RAG),0.297 ± 0.000,0.0% ± 0.0%,205 ± 0,1.00 ± 0.00,0.00 ± 0.00,0.18s ± 0.00s,-28.2%,-64.0%
+scifact,Llama-3.1-8B-Instruct,Always Retrieve,0.414 ± 0.002,100.0% ± 0.0%,569 ± 0,1.00 ± 0.00,1.00 ± 0.00,1.77s ± 0.01s,+0.0%,+0.0%
+scifact,Llama-3.1-8B-Instruct,Granular,0.433 ± 0.001,0.0% ± 0.0%,1899 ± 1,3.64 ± 0.00,2.64 ± 0.00,5.63s ± 0.03s,+4.4%,+233.7%
+scifact,Llama-3.1-8B-Instruct,Perplexity [Logic Check On],0.379 ± 0.001,66.7% ± 0.0%,585 ± 0,1.67 ± 0.00,0.67 ± 0.00,1.38s ± 0.00s,-8.5%,+2.9%
+scifact,Llama-3.1-8B-Instruct,MaxSeqProb [Logic Check On],0.378 ± 0.001,66.7% ± 0.0%,586 ± 0,1.67 ± 0.00,0.67 ± 0.00,1.35s ± 0.00s,-8.7%,+3.0%
+scifact,Llama-3.1-8B-Instruct,Ensemble,0.354 ± 0.010,44.7% ± 9.9%,455 ± 58,1.45 ± 0.10,0.45 ± 0.10,0.96s ± 0.18s,-14.5%,-20.0%
+scifact,Llama-3.1-8B-Instruct,MeanTokEnt [Logic Check On],0.344 ± 0.001,51.3% ± 0.0%,499 ± 0,1.51 ± 0.00,0.51 ± 0.00,1.08s ± 0.00s,-17.0%,-12.4%
+scifact,Llama-3.1-8B-Instruct,Ensemble [Logic Check On],0.334 ± 0.008,50.6% ± 3.9%,824 ± 21,3.50 ± 0.04,0.50 ± 0.04,1.86s ± 0.08s,-19.3%,+44.8%
+scifact,Llama-3.1-8B-Instruct,LogicalContradiction [Logic Check On],0.289 ± 0.000,13.0% ± 0.0%,609 ± 0,3.13 ± 0.00,0.13 ± 0.00,1.20s ± 0.01s,-30.3%,+7.0%
+scifact,Qwen3-4B-Instruct-2507,Parametric (0% RAG),0.440 ± 0.000,0.0% ± 0.0%,179 ± 0,1.00 ± 0.00,0.00 ± 0.00,0.11s ± 0.00s,-42.0%,-67.6%
+scifact,Qwen3-4B-Instruct-2507,Always Retrieve,0.760 ± 0.000,100.0% ± 0.0%,553 ± 1,1.00 ± 0.00,1.00 ± 0.00,1.70s ± 0.01s,+0.0%,+0.0%
+scifact,Qwen3-4B-Instruct-2507,Granular,0.739 ± 0.000,0.0% ± 0.0%,1272 ± 1,2.63 ± 0.00,1.63 ± 0.00,3.23s ± 0.03s,-2.7%,+130.0%
+scifact,Qwen3-4B-Instruct-2507,Ensemble,0.718 ± 0.006,76.3% ± 0.9%,600 ± 5,1.76 ± 0.01,0.76 ± 0.01,1.43s ± 0.03s,-5.5%,+8.6%
+scifact,Qwen3-4B-Instruct-2507,MaxSeqProb [Logic Check On],0.695 ± 0.000,76.3% ± 0.0%,591 ± 0,1.76 ± 0.00,0.76 ± 0.00,1.38s ± 0.01s,-8.5%,+6.8%
+scifact,Qwen3-4B-Instruct-2507,Perplexity [Logic Check On],0.695 ± 0.000,76.3% ± 0.0%,590 ± 0,1.76 ± 0.00,0.76 ± 0.00,1.39s ± 0.00s,-8.5%,+6.8%
+scifact,Qwen3-4B-Instruct-2507,MeanTokEnt [Logic Check On],0.669 ± 0.000,70.0% ± 0.0%,559 ± 0,1.70 ± 0.00,0.70 ± 0.00,1.28s ± 0.02s,-11.9%,+1.1%
+scifact,Qwen3-4B-Instruct-2507,Ensemble [Logic Check On],0.628 ± 0.005,39.3% ± 1.1%,674 ± 6,3.39 ± 0.01,0.39 ± 0.01,1.26s ± 0.02s,-17.4%,+21.9%
+scifact,Qwen3-4B-Instruct-2507,LogicalContradiction [Logic Check On],0.612 ± 0.000,35.7% ± 0.0%,653 ± 0,3.36 ± 0.00,0.36 ± 0.00,1.21s ± 0.01s,-19.4%,+18.0%
+scifact,Mistral-7B-Instruct-v0.3,Parametric (0% RAG),0.438 ± 0.000,0.0% ± 0.0%,253 ± 0,1.00 ± 0.00,0.00 ± 0.00,0.11s ± 0.00s,-37.4%,-64.1%
+scifact,Mistral-7B-Instruct-v0.3,Always Retrieve,0.699 ± 0.000,100.0% ± 0.0%,705 ± 1,1.00 ± 0.00,1.00 ± 0.00,1.76s ± 0.00s,+0.0%,+0.0%
+scifact,Mistral-7B-Instruct-v0.3,Granular,0.625 ± 0.000,0.0% ± 0.0%,2130 ± 1,3.15 ± 0.00,2.15 ± 0.00,5.00s ± 0.03s,-10.7%,+202.3%
+scifact,Mistral-7B-Instruct-v0.3,MeanTokEnt [Logic Check On],0.672 ± 0.000,58.0% ± 0.0%,672 ± 0,1.58 ± 0.00,0.58 ± 0.00,1.15s ± 0.01s,-3.9%,-4.6%
+scifact,Mistral-7B-Instruct-v0.3,Ensemble [Logic Check On],0.666 ± 0.009,52.4% ± 2.7%,1006 ± 19,3.53 ± 0.03,0.53 ± 0.03,1.94s ± 0.05s,-4.8%,+42.8%
+scifact,Mistral-7B-Instruct-v0.3,MaxSeqProb [Logic Check On],0.627 ± 0.041,51.0% ± 13.7%,622 ± 99,1.51 ± 0.14,0.51 ± 0.14,1.04s ± 0.25s,-10.4%,-11.7%
+scifact,Mistral-7B-Instruct-v0.3,Ensemble,0.616 ± 0.033,46.0% ± 7.5%,584 ± 57,1.46 ± 0.08,0.46 ± 0.08,0.94s ± 0.14s,-11.9%,-17.2%
+scifact,Mistral-7B-Instruct-v0.3,Perplexity [Logic Check On],0.610 ± 0.017,46.7% ± 3.3%,586 ± 25,1.46 ± 0.03,0.46 ± 0.03,0.96s ± 0.06s,-12.8%,-16.8%
+scifact,Mistral-7B-Instruct-v0.3,LogicalContradiction [Logic Check On],0.555 ± 0.007,27.0% ± 0.3%,827 ± 3,3.27 ± 0.00,0.27 ± 0.00,1.51s ± 0.01s,-20.6%,+17.4%

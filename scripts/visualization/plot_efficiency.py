@@ -41,7 +41,7 @@ def main():
     })
 
     PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-    data_path = PROJECT_ROOT / 'visualizations' / 'unified_tables' / 'Table2_End_to_End_Efficiency_unified.csv'
+    data_path = PROJECT_ROOT / 'vis_run_0.3' / 'unified_tables' / 'Table2_End_to_End_Efficiency_unified.csv'
     df = pd.read_csv(data_path)
 
     # Parse the "mean ± std" formatted columns into numeric values
@@ -49,7 +49,7 @@ def main():
     df['Total_Tokens'] = df['Total_Tokens'].apply(parse_mean_std)
 
     # Output directory under visualizations/
-    out_dir = PROJECT_ROOT / 'visualizations' / 'efficiency_plots'
+    out_dir = PROJECT_ROOT / 'vis_run_0.3' / 'efficiency_plots'
     out_dir.mkdir(parents=True, exist_ok=True)
 
     datasets = df['Dataset'].unique()
@@ -84,16 +84,26 @@ def main():
 
         for idx, model in enumerate(models):
             model_data = subset[subset['Model'] == model].copy()
-            model_data = model_data.sort_values(by='Total_Tokens')
+            
+            # Find the "Always Retrieve" tokens for this model to normalize
+            ar_row = model_data[model_data['Method'] == 'Always Retrieve']
+            if len(ar_row) > 0:
+                ar_tokens = ar_row['Total_Tokens'].values[0]
+                model_data['Relative_Tokens'] = (model_data['Total_Tokens'] / ar_tokens) * 100
+            else:
+                print(f"Warning: No 'Always Retrieve' found for {model} on {dataset}. Defaulting to absolute.")
+                model_data['Relative_Tokens'] = model_data['Total_Tokens']
+
+            model_data = model_data.sort_values(by='Relative_Tokens')
 
             color = colors[idx % len(colors)]
             marker_shape = markers[idx % len(markers)]
 
-            # Deterministic dodge to reduce overlap between models
-            x_dodge = (idx - 1) * 15
+            # Deterministic dodge to reduce overlap between models (now in % units)
+            x_dodge = (idx - 1) * 1.5 
             y_dodge = (idx - 1) * 0.002
 
-            x_vals = model_data['Total_Tokens'] + x_dodge
+            x_vals = model_data['Relative_Tokens'] + x_dodge
             y_vals = model_data['Balanced_Accuracy'] + y_dodge
 
             clean_name = model_name_map.get(model, model)
@@ -122,20 +132,20 @@ def main():
                     else:  # Parametric
                         s_marker, s_size = 'P', 22
 
-                    ax.plot(row['Total_Tokens'] + x_dodge, row['Balanced_Accuracy'] + y_dodge,
+                    ax.plot(row['Relative_Tokens'] + x_dodge, row['Balanced_Accuracy'] + y_dodge,
                             marker=s_marker, color=color, markersize=s_size,
                             linestyle='None', markeredgecolor='black',
                             markeredgewidth=1.5, zorder=3)
                 else:
                     # UQ method: plot hollow marker
-                    ax.plot(row['Total_Tokens'] + x_dodge, row['Balanced_Accuracy'] + y_dodge,
+                    ax.plot(row['Relative_Tokens'] + x_dodge, row['Balanced_Accuracy'] + y_dodge,
                             marker=marker_shape, markerfacecolor='none',
                             color=color, markersize=14, markeredgewidth=1.5,
                             linestyle='None', zorder=2)
 
         ax.set_title(f'Accuracy-Efficiency Trade-off: {dataset_title_map.get(dataset, dataset)} Dataset',
                      weight='bold', pad=15)
-        ax.set_xlabel('Average Tokens Consumed (per claim)')
+        ax.set_xlabel('Token Consumption (% of Always RAG)')
         ax.set_ylabel('Balanced Accuracy')
 
         # Grid and spines
@@ -151,13 +161,13 @@ def main():
         # Special markers for legend (kept at a readable size for the legend box)
         handles.extend([
             Line2D([0], [0], marker='P', color='gray', linestyle='None',
-                   markersize=13, markeredgecolor='black', label='Parametric (0% RAG)'),
+                   markersize=13, markeredgecolor='black', label='Parametric Only'),
             Line2D([0], [0], marker='X', color='gray', linestyle='None',
-                   markersize=13, markeredgecolor='black', label='Always Retrieve'),
+                   markersize=13, markeredgecolor='black', label='Always RAG'),
             Line2D([0], [0], marker='*', color='gray', linestyle='None',
-                   markersize=17, markeredgecolor='black', label='Granular Verification')
+                   markersize=17, markeredgecolor='black', label='Fine-grained RAG')
         ])
-        labels.extend(['Parametric (0% RAG)', 'Always Retrieve', 'Granular Verification'])
+        labels.extend(['Parametric Only', 'Always RAG', 'Fine-grained RAG'])
 
         legend = ax.legend(handles, labels, loc='upper right', frameon=True,
                            fancybox=False, edgecolor='black',
