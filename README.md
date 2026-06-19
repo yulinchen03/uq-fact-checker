@@ -2,16 +2,16 @@
 
 **Author**: Yulin Chen
 
-This repository contains the codebase and experiment code for the UQ-based RAG fact-checking system presented in our paper "Efficient LLM Fact-checking With Uncertainty Quantification" that dynamically decides when to rely on a Large Language Model's (LLM) parametric knowledge and when to trigger external retrieval based on uncertainty quantification (UQ).
+This repository contains the codebase and experiment code for the UQ-based RAG fact-checking system presented in the thesis ["Efficient LLM Fact-checking With Uncertainty Quantification"](https://pure.tudelft.nl/admin/files/298643036/Efficient_LLM_Fact-checking_With_Uncertainty_Quantification.pdf) that dynamically decides when to rely on a Large Language Model's (LLM) parametric knowledge and when to trigger external retrieval based on the model's uncertainty. We compare the performance of different UQ methods and evaluate the trade-off between retrieval cost and fact-checking accuracy.
 
 ## Architecture
 
 The system evaluates claims using several distinct modes:
-- **Parametric (0% RAG)**: Answers claims using solely the LLM's internal knowledge without any retrieval.
-- **Always Retrieve (100% RAG)**: Always retrieves external evidence (vector database) for every claim.
-- **Granular Verification**: Decomposes complex claims into atomic facts and verifies each independently using retrieval.
+- **Parametric Only (never_retrieve)**: Answers claims using solely the LLM's internal knowledge without any retrieval.
+- **Always RAG (always_retrieve)**: Always retrieves external evidence (vector database) for every claim.
+- **Fine-grained RAG (granular)**: Decomposes complex claims into atomic facts and verifies each independently using retrieval.
 - **UQ-Aware**: Generates a parametric answer, measures the uncertainty of that generation (using metrics like Mean Token Entropy, Max Sequence Probability, etc.), and triggers retrieval only if uncertainty exceeds a calibrated threshold.
-- **UQ Decompose**: Combines UQ-aware selective retrieval with granular decomposition to isolate uncertainty at the atomic fact level. **(Note: This was tested during development, but not used for our final analysis)**
+- **UQ-Decompose**: Combines UQ-aware selective retrieval with granular decomposition to isolate uncertainty at the atomic fact level. **(Note: This was tested during development, but not used for our final analysis)**
 
 The core pipeline utilizes:
 - [**vLLM**](https://vllm.ai/) for high-throughput LLM inference.
@@ -42,7 +42,7 @@ uv pip install transformers==4.57.6 sentence-transformers==5.2.3 numpy==1.26.4 t
 ```
 Make sure to install the cuda version of torch for your system.
 
-Set up your `.env` file with necessary API keys:
+Set up your `.env` file with necessary API keys (for running the pipeline with OpenAI/OpenAI-compatible APIs):
 ```
 OPENAI_API_KEY=your_key_here
 ```

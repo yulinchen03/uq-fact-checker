@@ -6,11 +6,11 @@ import sys
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 def get_best_model_examples(dataset, split="test"):
-    search_path = str(PROJECT_ROOT / "results_dump" / "final" / dataset / "*" / "uq_aware" / "Ensemble" / f"results_{split}_label_only_logic_discrete.jsonl")
+    search_path = str(PROJECT_ROOT / "results_dump" / "temp0.3" / dataset / "*" / "uq_aware" / "Ensemble" / f"results_{split}_label_only_logic_discrete.jsonl")
     files = glob.glob(search_path)
     
     if not files:
-        search_path = str(PROJECT_ROOT / "results_dump" / "final" / dataset / "*" / "uq_aware" / "Ensemble" / "results_val_label_only_logic_discrete.jsonl")
+        search_path = str(PROJECT_ROOT / "results_dump" / "temp0.3" / dataset / "*" / "uq_aware" / "Ensemble" / "results_val_label_only_logic_discrete.jsonl")
         files = glob.glob(search_path)
         if not files:
             return None, None, None
